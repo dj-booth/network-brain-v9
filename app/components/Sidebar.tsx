@@ -10,12 +10,16 @@ import {
   MessageSquare,
   PlusCircle,
   Inbox,
-  Settings
+  Settings,
+  Calendar,
+  Users
 } from 'lucide-react';
 
 const menuItems = [
   { name: 'Directory', path: '/', icon: FolderOpen },
   { name: 'Introductions', path: '/introductions', icon: MessageSquare },
+  { name: 'Communities', path: '/communities', icon: Users },
+  { name: 'Events', path: '/events', icon: Calendar },
   { name: 'Add Context', path: '/add-context', icon: PlusCircle },
   { name: 'Inbox', path: '/inbox', icon: Inbox },
   { name: 'Settings', path: '/settings', icon: Settings },
