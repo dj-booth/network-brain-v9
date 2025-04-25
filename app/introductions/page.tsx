@@ -291,22 +291,36 @@ export default function IntroductionsPage() {
   };
 
   const handleUpdateIntroduction = async (introId: string, status: string, notes?: string) => {
+    console.log(`Attempting to update introduction ${introId} with status: ${status}, notes: ${notes || feedbackNotes[introId]}`);
     try {
-      const { error } = await supabase
+      const updatePayload = { 
+        status: status,
+        admin_notes: notes || feedbackNotes[introId] || null,
+        updated_at: new Date().toISOString()
+      };
+      console.log('Supabase update payload:', updatePayload);
+
+      const { data, error } = await supabase
         .from('introductions')
-        .update({ 
-          status: status,
-          admin_notes: notes || feedbackNotes[introId] || null,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', introId);
 
-      if (error) throw error;
+      console.log('Supabase update response:', { data, error });
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
+
+      console.log(`Successfully updated introduction ${introId} in DB.`);
 
       // Remove the processed introduction from the list
-      setSuggestedIntroductions(prev => 
-        prev.filter(intro => intro.id !== introId)
-      );
+      console.log('Updating local state to remove introduction:', introId);
+      setSuggestedIntroductions(prev => {
+        const newState = prev.filter(intro => intro.id !== introId);
+        console.log('New local state (suggestedIntroductions):', newState);
+        return newState;
+      });
 
       // Clear the feedback for this introduction
       setFeedbackNotes(prev => {
@@ -320,7 +334,7 @@ export default function IntroductionsPage() {
         description: `Introduction ${status === 'skipped' ? 'skipped' : 'suggested'} successfully.`,
       });
     } catch (err) {
-      console.error('Error updating introduction:', err);
+      console.error('Error in handleUpdateIntroduction:', err);
       toast({
         title: "Error",
         description: "Failed to update introduction. Please try again.",
@@ -641,7 +655,7 @@ export default function IntroductionsPage() {
                             className="text-red-600 bg-red-50 hover:bg-red-100 border-red-200"
                             onClick={() => handleSkip(intro)}
                           >
-                            Skip (with reason)
+                            Skip (with feedback)
                           </Button>
                           <Button
                             variant="outline"

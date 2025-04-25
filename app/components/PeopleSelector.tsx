@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Command,
   CommandEmpty,
@@ -36,6 +37,11 @@ interface Person {
   company?: string;
 }
 
+interface Community {
+  id: string;
+  name: string;
+}
+
 export type ResponseStatus = 
   | 'consider_for_invite'
   | 'to_invite'
@@ -48,20 +54,49 @@ export type ResponseStatus =
 interface PeopleSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (personId: string, status: ResponseStatus) => void;
+  onSelect: (personIds: string[], status: ResponseStatus) => void;
   eventId: string;
+  communityId?: string | null;
 }
 
-export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: PeopleSelectorProps) {
-  console.log('PeopleSelector received eventId:', eventId);
+export function PeopleSelector({ open, onOpenChange, onSelect, eventId, communityId }: PeopleSelectorProps) {
+  console.log('PeopleSelector received eventId:', eventId, 'communityId:', communityId);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [selectedPeopleIds, setSelectedPeopleIds] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<ResponseStatus>('consider_for_invite');
+  const [searchScope, setSearchScope] = useState<'all' | 'community'>(communityId ? 'community' : 'all');
+  const [communityName, setCommunityName] = useState<string>('');
+
+  useEffect(() => {
+    async function loadCommunityName() {
+      if (!communityId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('communities')
+          .select('name')
+          .eq('id', communityId)
+          .single();
+
+        if (error) throw error;
+        if (data) {
+          setCommunityName(data.name);
+        }
+      } catch (error) {
+        console.error('Error loading community name:', error);
+      }
+    }
+
+    if (communityId) {
+      loadCommunityName();
+    }
+  }, [communityId]);
 
   useEffect(() => {
     async function loadPeople() {
       console.log('PeopleSelector loadPeople using eventId:', eventId);
+      setLoading(true);
       try {
         console.log('Loading people...');
         
@@ -75,15 +110,36 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
 
         const existingIds = existingAttendees?.map(a => a.person_id) || [];
 
-        // Get all people except those already attending
-        const query = supabase
+        // Base query for people
+        let query = supabase
           .from('people')
           .select('id, name, image_url, title, company')
           .order('name');
 
-        // Only add the not-in condition if there are existing attendees
+        // Exclude existing attendees if any
         if (existingIds.length > 0) {
-          query.not('id', 'in', `(${existingIds.join(',')})`);
+          query = query.not('id', 'in', `(${existingIds.join(',')})`);
+        }
+
+        // If searching within community, join with community_members
+        if (searchScope === 'community' && communityId) {
+          const { data: communityMembers, error: membersError } = await supabase
+            .from('community_members')
+            .select('person_id')
+            .eq('community_id', communityId)
+            .eq('membership_status', 'approved');
+
+          if (membersError) throw membersError;
+
+          const memberIds = communityMembers.map(m => m.person_id);
+          if (memberIds.length > 0) {
+            query = query.in('id', memberIds);
+          } else {
+            // If no members in community, return empty array
+            setPeople([]);
+            setLoading(false);
+            return;
+          }
         }
 
         const { data, error } = await query;
@@ -97,6 +153,7 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
         setPeople(data || []);
       } catch (error) {
         console.error('Error loading people:', error);
+        toast.error('Failed to load people');
       } finally {
         setLoading(false);
       }
@@ -104,25 +161,38 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
 
     if (open) {
       loadPeople();
+      setSelectedPeopleIds(new Set());
+      setSelectedStatus('consider_for_invite');
     }
-  }, [open, eventId]);
+  }, [open, eventId, searchScope, communityId]);
+
+  const handlePersonToggle = (personId: string) => {
+    setSelectedPeopleIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(personId)) {
+        newSet.delete(personId);
+      } else {
+        newSet.add(personId);
+      }
+      return newSet;
+    });
+  };
 
   const handleSelect = () => {
-    if (selectedPerson) {
+    const selectedIdsArray = Array.from(selectedPeopleIds);
+    if (selectedIdsArray.length > 0) {
       try {
-        console.log('Selecting person with details:', {
-          person: selectedPerson,
+        console.log('Selecting people with details:', {
+          personIds: selectedIdsArray,
           status: selectedStatus,
           eventId
         });
-        
-        onSelect(selectedPerson.id, selectedStatus);
+
+        onSelect(selectedIdsArray, selectedStatus);
         onOpenChange(false);
-        setSelectedPerson(null);
-        setSelectedStatus('consider_for_invite');
       } catch (error) {
         console.error('Error in handleSelect:', error);
-        toast.error('Failed to select person');
+        toast.error('Failed to select people');
       }
     }
   };
@@ -134,10 +204,32 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
           <DialogTitle>Add Attendee</DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-hidden flex flex-col gap-4">
+          {communityId && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Search Scope</label>
+              <Select
+                value={searchScope}
+                onValueChange={(value: 'all' | 'community') => setSearchScope(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Search All People</SelectItem>
+                  <SelectItem value="community">Search {communityName} Members</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="flex-1 min-h-0">
             <Command className="rounded-lg border shadow-md h-full">
               <CommandInput placeholder="Search people..." />
-              <CommandEmpty>No people found.</CommandEmpty>
+              <CommandEmpty>
+                {searchScope === 'community' 
+                  ? 'No community members found or all members are already attendees.'
+                  : 'No people found.'}
+              </CommandEmpty>
               <CommandList className="max-h-[200px] overflow-y-auto">
                 <CommandGroup>
                   {loading ? (
@@ -147,10 +239,22 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
                       <CommandItem
                         key={person.id}
                         value={person.name}
-                        onSelect={() => setSelectedPerson(person)}
+                        onSelect={(currentValue) => {
+                          console.log("CommandItem selected (ignored):", currentValue);
+                        }}
                         className="cursor-pointer"
                       >
-                        <div className="flex items-center gap-3 w-full">
+                        <div className="flex items-center gap-3 w-full" onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          handlePersonToggle(person.id);
+                        }}>
+                          <Checkbox
+                            checked={selectedPeopleIds.has(person.id)}
+                            onCheckedChange={() => handlePersonToggle(person.id)}
+                            aria-label={`Select ${person.name}`}
+                            className="mr-2"
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
                           <Avatar className="h-8 w-8">
                             <AvatarImage src={person.image_url} alt={person.name} />
                             <AvatarFallback>
@@ -165,9 +269,6 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
                               </p>
                             )}
                           </div>
-                          {selectedPerson?.id === person.id && (
-                            <Check className="h-4 w-4 text-primary" />
-                          )}
                         </div>
                       </CommandItem>
                     ))
@@ -177,35 +278,33 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId }: People
             </Command>
           </div>
 
-          {selectedPerson && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Response Status</label>
-              <Select
-                value={selectedStatus}
-                onValueChange={(value) => setSelectedStatus(value as ResponseStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="consider_for_invite">Consider for Invite</SelectItem>
-                  <SelectItem value="to_invite">To Invite</SelectItem>
-                  <SelectItem value="invited">Invited</SelectItem>
-                  <SelectItem value="attending">Attending</SelectItem>
-                  <SelectItem value="rsvp_accepted">RSVP Accepted</SelectItem>
-                  <SelectItem value="rsvp_maybe">RSVP Maybe</SelectItem>
-                  <SelectItem value="rsvp_declined">RSVP Declined</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Response Status (for all selected)</label>
+            <Select
+              value={selectedStatus}
+              onValueChange={(value) => setSelectedStatus(value as ResponseStatus)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="consider_for_invite">Consider for Invite</SelectItem>
+                <SelectItem value="to_invite">To Invite</SelectItem>
+                <SelectItem value="invited">Invited</SelectItem>
+                <SelectItem value="attending">Attending</SelectItem>
+                <SelectItem value="rsvp_accepted">RSVP Accepted</SelectItem>
+                <SelectItem value="rsvp_maybe">RSVP Maybe</SelectItem>
+                <SelectItem value="rsvp_declined">RSVP Declined</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="flex justify-end pt-2">
             <Button
               onClick={handleSelect}
-              disabled={!selectedPerson}
+              disabled={selectedPeopleIds.size === 0}
             >
-              Add Attendee
+              Add {selectedPeopleIds.size > 0 ? selectedPeopleIds.size : ''} Attendee{selectedPeopleIds.size !== 1 ? 's' : ''}
             </Button>
           </div>
         </div>

@@ -10,4 +10,12 @@ export interface Contact {
   detailedSummary: string;
   introsSought: string;
   reasonsToIntroduce: string;
-} 
+}
+
+// Add the new type for community membership status
+export type CommunityMembershipStatus = 
+  | 'prospect' 
+  | 'applied' 
+  | 'nominated' 
+  | 'approved' 
+  | 'inactive'; 

@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   ChevronLeft,
-  FolderOpen,
+  UserCircle,
   MessageSquare,
   PlusCircle,
   Inbox,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 const menuItems = [
-  { name: 'Directory', path: '/', icon: FolderOpen },
+  { name: 'Directory', path: '/', icon: UserCircle },
   { name: 'Introductions', path: '/introductions', icon: MessageSquare },
   { name: 'Communities', path: '/communities', icon: Users },
   { name: 'Events', path: '/events', icon: Calendar },

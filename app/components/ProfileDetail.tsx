@@ -3,16 +3,23 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PencilIcon, CheckIcon, PlusCircleIcon } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CommunitySelector } from './CommunitySelector';
 import { Timeline } from './Timeline';
 import { toast } from 'sonner';
 import { AddContextDialog } from './AddContextDialog';
 import { useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
 
 interface ProfileDetailProps {
   contact: Contact;
+}
+
+// Define a simple type for the community info we need
+interface CommunityMembershipInfo {
+  id: string;
+  name: string;
 }
 
 export function ProfileDetail({ contact }: ProfileDetailProps) {
@@ -23,6 +30,45 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   const [showCommunitySelector, setShowCommunitySelector] = useState(false);
   const [showAddContext, setShowAddContext] = useState(false);
   const [timelineRefreshTrigger, setTimelineRefreshTrigger] = useState(0);
+  // State to hold the communities the person is a member of
+  const [communityMemberships, setCommunityMemberships] = useState<CommunityMembershipInfo[]>([]);
+
+  // Fetch community memberships when contact changes
+  useEffect(() => {
+    const fetchCommunityMemberships = async () => {
+      if (!contact.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('community_members')
+          .select(`
+            community:communities (
+              id,
+              name
+            )
+          `)
+          .eq('person_id', contact.id)
+          // Optionally filter by status if needed, e.g., only show 'approved'?
+          // .eq('membership_status', 'approved') 
+
+        if (error) throw error;
+
+        // Transform data to get community names
+        const memberships = data
+          ?.map(item => (item as any).community)
+          .filter(community => community !== null) as CommunityMembershipInfo[] || [];
+        
+        setCommunityMemberships(memberships);
+
+      } catch (error) {
+        console.error('Error fetching community memberships:', error);
+        // Optional: Show toast error
+        // toast.error("Failed to load community memberships");
+      }
+    };
+
+    fetchCommunityMemberships();
+  }, [contact.id]);
 
   const handleSave = async () => {
     try {
@@ -102,9 +148,10 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
       // Add to community
       const { data, error } = await supabase
         .from('community_members')
-        .insert([{ 
+        .insert([{
           community_id: communityId,
-          person_id: contact.id 
+          person_id: contact.id,
+          membership_status: 'prospect'
         }])
         .select()
         .single();
@@ -170,136 +217,170 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
       </div>
 
       {/* Content */}
-      <div className="p-6 space-y-8">
-        {/* Profile Header */}
-        <div className="flex items-start space-x-6">
-          <div className="relative h-24 w-24 flex-shrink-0">
-            <Image
-              src={contact.imageUrl}
-              alt={contact.name}
-              width={96}
-              height={96}
-              className="rounded-full object-cover"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2">
+      <div className="p-6 flex justify-between items-start space-x-6">
+        {/* Left Column: Profile Info & Details */}
+        <div className="flex-1 space-y-8 min-w-0">
+          {/* Profile Header */}
+          <div className="flex items-start space-x-6">
+            <div className="relative h-24 w-24 flex-shrink-0">
+              <Image
+                src={contact.imageUrl}
+                alt={contact.name}
+                width={96}
+                height={96}
+                className="rounded-full object-cover"
+              />
+            </div>
+            {/* Name, Title, Company, Tags */}
+            <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold truncate">{contact.name}</h1>
+              {contact.title && (
+                <p className="text-muted-foreground mt-1">{contact.title}</p>
+              )}
+              {contact.company && (
+                <p className="text-muted-foreground">{contact.company}</p>
+              )}
+              {/* Community Membership Tags */}
+              {communityMemberships.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {communityMemberships.map((community, index) => {
+                    const isSomethingNew = community.name === 'Something New';
+                    // Define colors - add more as needed
+                    const colors = [
+                      'bg-blue-100 text-blue-800',
+                      'bg-green-100 text-green-800',
+                      'bg-purple-100 text-purple-800',
+                      'bg-pink-100 text-pink-800',
+                    ];
+                    const colorClass = isSomethingNew 
+                      ? 'bg-yellow-100 text-yellow-800' 
+                      : colors[index % colors.length]; // Cycle through other colors
+
+                    return (
+                      <Badge 
+                        key={community.id} 
+                        variant="outline" 
+                        className={`border ${colorClass}`}
+                      >
+                        {community.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            {contact.title && (
-              <p className="text-muted-foreground mt-1">{contact.title}</p>
+          </div>
+
+          {/* Detailed Summary, Intros Sought, etc. remain below the header */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">About</h3>
+            {isEditing ? (
+              <Textarea
+                value={editedContact.detailedSummary}
+                onChange={(e) => setEditedContact({
+                  ...editedContact,
+                  detailedSummary: e.target.value
+                })}
+                className="min-h-[100px]"
+              />
+            ) : (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                {contact.detailedSummary}
+              </p>
             )}
-            {contact.company && (
-              <p className="text-muted-foreground">{contact.company}</p>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Looking to Connect With</h3>
+            {isEditing ? (
+              <Textarea
+                value={editedContact.introsSought || ''}
+                onChange={(e) => setEditedContact({
+                  ...editedContact,
+                  introsSought: e.target.value
+                })}
+                className="min-h-[100px] w-full"
+                placeholder="Describe the types of people you're looking to connect with..."
+              />
+            ) : (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                {contact.introsSought || 'No connection preferences specified'}
+              </p>
             )}
-            <div className="flex gap-3 mt-4">
-              <Button
-                variant="outline"
-                onClick={() => setShowCommunitySelector(true)}
-              >
-                Add to Community
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/introductions?personId=${contact.id}`)}
-              >
-                Suggest Intros
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleAddToEvent()}
-              >
-                Add to Event
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowAddContext(true)}
-              >
-                Add Context
-              </Button>
-            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Ways {contact.name.split(' ')[0]} Can Help</h3>
+            {isEditing ? (
+              <Textarea
+                value={editedContact.reasonsToIntroduce || ''}
+                onChange={(e) => setEditedContact({
+                  ...editedContact,
+                  reasonsToIntroduce: e.target.value
+                })}
+                className="min-h-[100px] w-full"
+                placeholder="Describe how you can help others..."
+              />
+            ) : (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                {contact.reasonsToIntroduce || 'No ways to help specified'}
+              </p>
+            )}
+          </div>
+
+          {/* Timeline Section */}
+          <div className="space-y-4 pt-4 border-t">
+            <h3 className="text-lg font-semibold">Timeline</h3>
+            <Timeline personId={contact.id} refreshTrigger={timelineRefreshTrigger} />
           </div>
         </div>
 
-        {/* Community Selector Dialog */}
-        <CommunitySelector
-          open={showCommunitySelector}
-          onOpenChange={setShowCommunitySelector}
-          onSelect={handleAddToCommunity}
-        />
-
-        <AddContextDialog
-          contact={contact}
-          open={showAddContext}
-          onOpenChange={setShowAddContext}
-          onNoteAdded={() => setTimelineRefreshTrigger(prev => prev + 1)}
-        />
-
-        {/* Detailed Summary */}
-        <div>
-          <h3 className="text-lg font-semibold mb-3">About</h3>
-          {isEditing ? (
-            <Textarea
-              value={editedContact.detailedSummary}
-              onChange={(e) => setEditedContact({
-                ...editedContact,
-                detailedSummary: e.target.value
-              })}
-              className="min-h-[100px]"
-            />
-          ) : (
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {contact.detailedSummary}
-            </p>
-          )}
-        </div>
-
-        {/* Intros Sought */}
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Looking to Connect With</h3>
-          {isEditing ? (
-            <Textarea
-              value={editedContact.introsSought || ''}
-              onChange={(e) => setEditedContact({
-                ...editedContact,
-                introsSought: e.target.value
-              })}
-              className="min-h-[100px] w-full"
-              placeholder="Describe the types of people you're looking to connect with..."
-            />
-          ) : (
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {contact.introsSought || 'No connection preferences specified'}
-            </p>
-          )}
-        </div>
-
-        {/* Reasons to Introduce */}
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Ways {contact.name.split(' ')[0]} Can Help</h3>
-          {isEditing ? (
-            <Textarea
-              value={editedContact.reasonsToIntroduce || ''}
-              onChange={(e) => setEditedContact({
-                ...editedContact,
-                reasonsToIntroduce: e.target.value
-              })}
-              className="min-h-[100px] w-full"
-              placeholder="Describe how you can help others..."
-            />
-          ) : (
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {contact.reasonsToIntroduce || 'No ways to help specified'}
-            </p>
-          )}
-        </div>
-
-        {/* Timeline Section */}
-        <div className="space-y-4 pt-4 border-t">
-          <h3 className="text-lg font-semibold">Timeline</h3>
-          <Timeline personId={contact.id} refreshTrigger={timelineRefreshTrigger} />
+        {/* Right Column: Action Buttons (Stacked) */}
+        <div className="flex flex-col gap-3 w-40"> {/* Fixed width for buttons */}
+          <Button
+            variant="outline"
+            onClick={() => setShowCommunitySelector(true)}
+            size="sm" // Use consistent size
+          >
+            Add to Community
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/introductions?personId=${contact.id}`)}
+            size="sm"
+          >
+            Suggest Intros
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleAddToEvent()} // Ensure this function exists and is correct
+            size="sm"
+          >
+            Add to Event
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowAddContext(true)}
+            size="sm"
+          >
+            Add Context
+          </Button>
         </div>
       </div>
+
+      {/* Dialogs remain outside the main flex layout */}
+      <CommunitySelector
+        open={showCommunitySelector}
+        onOpenChange={setShowCommunitySelector}
+        onSelect={handleAddToCommunity}
+      />
+
+      <AddContextDialog
+        contact={contact}
+        open={showAddContext}
+        onOpenChange={setShowAddContext}
+        onNoteAdded={() => setTimelineRefreshTrigger(prev => prev + 1)}
+      />
     </div>
   );
 } 

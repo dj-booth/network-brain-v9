@@ -21,11 +21,14 @@ export default function NewEventPage() {
     const formData = new FormData(e.currentTarget);
     const title = formData.get('title') as string;
     const description = formData.get('description') as string;
-    const shortDescription = formData.get('shortDescription') as string;
     const eventDate = formData.get('eventDate') as string;
+    const startTime = formData.get('startTime') as string;
+    const endTime = formData.get('endTime') as string;
     const location = formData.get('location') as string;
 
-    // Generate a URL-friendly slug from the title
+    const startDateTime = startTime ? `${eventDate}T${startTime}:00Z` : `${eventDate}T00:00:00Z`;
+    const endDateTime = endTime ? `${eventDate}T${endTime}:00Z` : startDateTime;
+
     const slug = title.toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
@@ -34,8 +37,9 @@ export default function NewEventPage() {
       console.log('Creating event with data:', {
         title,
         description,
-        short_description: shortDescription,
         event_date: eventDate,
+        start_time: startDateTime,
+        end_time: endDateTime,
         location,
         slug,
       });
@@ -46,8 +50,9 @@ export default function NewEventPage() {
           {
             title,
             description,
-            short_description: shortDescription,
             event_date: eventDate,
+            start_time: startDateTime,
+            end_time: endDateTime,
             location,
             slug,
             attendee_count: 0,
@@ -102,15 +107,6 @@ export default function NewEventPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="shortDescription">Short Description</Label>
-              <Input
-                id="shortDescription"
-                name="shortDescription"
-                placeholder="Brief description (displayed in cards)"
-              />
-            </div>
-            
-            <div className="space-y-2">
               <Label htmlFor="description">Full Description</Label>
               <Textarea
                 id="description"
@@ -128,6 +124,25 @@ export default function NewEventPage() {
                 type="date"
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="startTime">Start Time</Label>
+                <Input
+                  id="startTime"
+                  name="startTime"
+                  type="time"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endTime">End Time</Label>
+                <Input
+                  id="endTime"
+                  name="endTime"
+                  type="time"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
