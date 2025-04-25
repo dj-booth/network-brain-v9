@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Search, Building2, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Person } from '@/lib/supabase';
+import { AudioRecorder } from '@/app/components/AudioRecorder';
 
 export default function AddContextPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,6 +15,7 @@ export default function AddContextPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [noteType, setNoteType] = useState<'text' | 'transcription'>('text');
 
   // Search people in Supabase
   useEffect(() => {
@@ -60,6 +62,11 @@ export default function AddContextPage() {
     }
   };
 
+  const handleTranscriptionComplete = (transcribedText: string) => {
+    setNoteContent(transcribedText);
+    setNoteType('transcription');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPerson || !noteContent.trim()) return;
@@ -74,7 +81,7 @@ export default function AddContextPage() {
         .insert({
           person_id: selectedPerson.id,
           content: noteContent.trim(),
-          type: 'text',
+          type: noteType,
         });
 
       if (error) throw error;
@@ -87,6 +94,7 @@ export default function AddContextPage() {
       setSelectedPerson(null);
       setSearchQuery('');
       setIsDropdownOpen(false);
+      setNoteType('text');
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -196,18 +204,24 @@ export default function AddContextPage() {
                 "Select a person to add a note..."
               }
               value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
+              onChange={(e) => {
+                setNoteContent(e.target.value);
+                setNoteType('text');
+              }}
               disabled={!selectedPerson}
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={!selectedPerson || !noteContent.trim() || isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isLoading ? 'Saving...' : 'Save Note'}
-          </button>
+          <div className="flex items-center gap-3">
+            <AudioRecorder onTranscriptionComplete={handleTranscriptionComplete} />
+            <button
+              type="submit"
+              disabled={!selectedPerson || !noteContent.trim() || isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? 'Saving...' : 'Save Note'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

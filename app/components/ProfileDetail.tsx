@@ -31,36 +31,12 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
         .from('people')
         .update({
           detailed_summary: editedContact.detailedSummary,
+          intros_sought: editedContact.introsSought,
+          reasons_to_introduce: editedContact.reasonsToIntroduce
         })
         .eq('id', contact.id);
 
       if (personError) throw personError;
-
-      // Update intros sought
-      const { error: introsError } = await supabase
-        .from('intros_sought')
-        .upsert(
-          editedContact.introsSought.map(intro => ({
-            person_id: contact.id,
-            title: intro.title,
-            description: intro.description
-          }))
-        );
-
-      if (introsError) throw introsError;
-
-      // Update reasons to introduce
-      const { error: reasonsError } = await supabase
-        .from('reasons_to_introduce')
-        .upsert(
-          editedContact.reasonsToIntroduce.map(reason => ({
-            person_id: contact.id,
-            title: reason.title,
-            description: reason.description
-          }))
-        );
-
-      if (reasonsError) throw reasonsError;
 
       setIsEditing(false);
       toast.success("Changes saved", {
@@ -273,79 +249,41 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
         {/* Intros Sought */}
         <div>
           <h3 className="text-lg font-semibold mb-3">Looking to Connect With</h3>
-          <div className="space-y-4">
-            {(isEditing ? editedContact.introsSought : contact.introsSought).map((intro, index) => (
-              <div key={index} className="bg-accent/10 rounded-lg p-4">
-                {isEditing ? (
-                  <>
-                    <input
-                      type="text"
-                      value={intro.title}
-                      onChange={(e) => {
-                        const newIntros = [...editedContact.introsSought];
-                        newIntros[index] = { ...intro, title: e.target.value };
-                        setEditedContact({ ...editedContact, introsSought: newIntros });
-                      }}
-                      className="w-full mb-2 bg-transparent border-b"
-                    />
-                    <Textarea
-                      value={intro.description}
-                      onChange={(e) => {
-                        const newIntros = [...editedContact.introsSought];
-                        newIntros[index] = { ...intro, description: e.target.value };
-                        setEditedContact({ ...editedContact, introsSought: newIntros });
-                      }}
-                      className="w-full"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <h4 className="font-medium mb-2">{intro.title}</h4>
-                    <p className="text-sm text-muted-foreground">{intro.description}</p>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          {isEditing ? (
+            <Textarea
+              value={editedContact.introsSought || ''}
+              onChange={(e) => setEditedContact({
+                ...editedContact,
+                introsSought: e.target.value
+              })}
+              className="min-h-[100px] w-full"
+              placeholder="Describe the types of people you're looking to connect with..."
+            />
+          ) : (
+            <p className="text-muted-foreground whitespace-pre-wrap">
+              {contact.introsSought || 'No connection preferences specified'}
+            </p>
+          )}
         </div>
 
         {/* Reasons to Introduce */}
         <div>
           <h3 className="text-lg font-semibold mb-3">Ways {contact.name.split(' ')[0]} Can Help</h3>
-          <div className="space-y-4">
-            {(isEditing ? editedContact.reasonsToIntroduce : contact.reasonsToIntroduce).map((reason, index) => (
-              <div key={index} className="bg-accent/10 rounded-lg p-4">
-                {isEditing ? (
-                  <>
-                    <input
-                      type="text"
-                      value={reason.title}
-                      onChange={(e) => {
-                        const newReasons = [...editedContact.reasonsToIntroduce];
-                        newReasons[index] = { ...reason, title: e.target.value };
-                        setEditedContact({ ...editedContact, reasonsToIntroduce: newReasons });
-                      }}
-                      className="w-full mb-2 bg-transparent border-b"
-                    />
-                    <Textarea
-                      value={reason.description}
-                      onChange={(e) => {
-                        const newReasons = [...editedContact.reasonsToIntroduce];
-                        newReasons[index] = { ...reason, description: e.target.value };
-                        setEditedContact({ ...editedContact, reasonsToIntroduce: newReasons });
-                      }}
-                      className="w-full"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <h4 className="font-medium mb-2">{reason.title}</h4>
-                    <p className="text-sm text-muted-foreground">{reason.description}</p>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          {isEditing ? (
+            <Textarea
+              value={editedContact.reasonsToIntroduce || ''}
+              onChange={(e) => setEditedContact({
+                ...editedContact,
+                reasonsToIntroduce: e.target.value
+              })}
+              className="min-h-[100px] w-full"
+              placeholder="Describe how you can help others..."
+            />
+          ) : (
+            <p className="text-muted-foreground whitespace-pre-wrap">
+              {contact.reasonsToIntroduce || 'No ways to help specified'}
+            </p>
+          )}
         </div>
 
         {/* Timeline Section */}

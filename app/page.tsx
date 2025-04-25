@@ -22,11 +22,7 @@ export default function DirectoryPage() {
         // Fetch people with their intros and reasons
         const { data: people, error: peopleError } = await supabase
           .from('people')
-          .select(`
-            *,
-            intros_sought(title, description),
-            reasons_to_introduce(title, description)
-          `);
+          .select('*');
 
         if (peopleError) throw peopleError;
 

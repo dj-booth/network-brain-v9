@@ -8,12 +8,6 @@ export interface Contact {
   email: string;
   lastContact?: string;
   detailedSummary: string;
-  introsSought: {
-    title: string;
-    description: string;
-  }[];
-  reasonsToIntroduce: {
-    title: string;
-    description: string;
-  }[];
+  introsSought: string;
+  reasonsToIntroduce: string;
 } 

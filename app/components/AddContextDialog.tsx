@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Contact } from '@/lib/types';
+import { AudioRecorder } from '@/app/components/AudioRecorder';
 
 interface AddContextDialogProps {
   contact: Contact;
@@ -18,6 +19,12 @@ interface AddContextDialogProps {
 export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: AddContextDialogProps) {
   const [noteContent, setNoteContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [noteType, setNoteType] = useState<'text' | 'voice'>('text');
+
+  const handleTranscriptionComplete = (transcribedText: string) => {
+    setNoteContent(transcribedText);
+    setNoteType('voice');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,15 +33,34 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
     try {
       setIsLoading(true);
 
-      const { error } = await supabase
+      // Log the data we're trying to insert
+      console.log('Attempting to save note with data:', {
+        person_id: contact.id,
+        content: noteContent.trim(),
+        type: noteType,
+      });
+
+      const { data, error } = await supabase
         .from('notes')
         .insert({
           person_id: contact.id,
           content: noteContent.trim(),
-          type: 'text',
-        });
+          type: noteType,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
+
+      console.log('Note saved successfully:', data);
 
       toast.success('Note added', {
         description: `Successfully added note for ${contact.name}`,
@@ -42,14 +68,22 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
 
       // Reset form and close dialog
       setNoteContent('');
+      setNoteType('text');
       onOpenChange(false);
       
       // Call the callback to refresh timeline
       onNoteAdded?.();
-    } catch (error) {
-      console.error('Error saving note:', error);
+    } catch (error: any) {
+      console.error('Full error object:', error);
+      console.error('Error saving note:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
       toast.error('Error saving note', {
-        description: 'Please try again.',
+        description: error.message || 'Please try again.',
       });
     } finally {
       setIsLoading(false);
@@ -70,10 +104,14 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
           <Textarea
             placeholder={`Write your note about ${contact.name} here...`}
             value={noteContent}
-            onChange={(e) => setNoteContent(e.target.value)}
+            onChange={(e) => {
+              setNoteContent(e.target.value);
+              setNoteType('text');
+            }}
             className="min-h-[100px]"
           />
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end items-center gap-3">
+            <AudioRecorder onTranscriptionComplete={handleTranscriptionComplete} />
             <Button
               type="button"
               variant="outline"

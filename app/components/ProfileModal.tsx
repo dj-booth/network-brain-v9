@@ -59,27 +59,17 @@ export function ProfileModal({ contact, onClose }: ProfileModalProps) {
           {/* Intros Sought */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Looking to Connect With</h3>
-            <div className="space-y-4">
-              {contact.introsSought.map((intro, index) => (
-                <div key={index} className="bg-accent/10 rounded-lg p-4">
-                  <h4 className="font-medium mb-2">{intro.title}</h4>
-                  <p className="text-sm text-muted-foreground">{intro.description}</p>
-                </div>
-              ))}
-            </div>
+            <p className="text-muted-foreground whitespace-pre-wrap">
+              {contact.introsSought || 'No connection preferences specified'}
+            </p>
           </div>
 
           {/* Reasons to Introduce */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Ways {contact.name.split(' ')[0]} Can Help</h3>
-            <div className="space-y-4">
-              {contact.reasonsToIntroduce.map((reason, index) => (
-                <div key={index} className="bg-accent/10 rounded-lg p-4">
-                  <h4 className="font-medium mb-2">{reason.title}</h4>
-                  <p className="text-sm text-muted-foreground">{reason.description}</p>
-                </div>
-              ))}
-            </div>
+            <p className="text-muted-foreground whitespace-pre-wrap">
+              {contact.reasonsToIntroduce || 'No ways to help specified'}
+            </p>
           </div>
         </div>
       </div>
