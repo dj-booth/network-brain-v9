@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { ContactCard } from './components/ContactCard';
 import { ContactList } from './components/ContactList';
 import { ViewToggle } from './components/ViewToggle';
+import { DirectoryLayout } from './components/DirectoryLayout';
 import { supabase } from '@/lib/supabase';
 import type { Contact } from '@/lib/types';
 
 export default function DirectoryPage() {
-  const [view, setView] = useState<'grid' | 'list'>('grid');
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,9 +60,8 @@ export default function DirectoryPage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl py-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold">Directory</h1>
-        <ViewToggle view={view} onViewChange={setView} />
       </div>
 
       {error && (
@@ -75,19 +75,11 @@ export default function DirectoryPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         </div>
       ) : (
-        <div className="w-full">
-          {view === 'list' ? (
-            <div className="bg-card rounded-lg border shadow-sm overflow-hidden">
-              <ContactList contacts={contacts} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {contacts.map((contact) => (
-                <ContactCard key={contact.id} contact={contact} />
-              ))}
-            </div>
-          )}
-        </div>
+        <DirectoryLayout
+          contacts={contacts}
+          selectedContact={selectedContact}
+          onSelectContact={setSelectedContact}
+        />
       )}
     </div>
   );
