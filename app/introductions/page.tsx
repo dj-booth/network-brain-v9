@@ -1,25 +1,52 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Building2, Briefcase } from 'lucide-react';
+import { Search, Building2, Briefcase, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Person } from '@/lib/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { IntroductionEmailDialog } from '@/app/components/IntroductionEmailDialog';
+import { Textarea } from '@/components/ui/textarea';
+import ReactMarkdown from 'react-markdown';
+import { useToast } from "@/components/ui/use-toast";
+import { Input } from '@/components/ui/input';
+import { useSearchParams } from 'next/navigation';
 
 interface SuggestedIntroduction {
+  id: string;
   person: Person;
   reasons: {
     source: string;
     target: string;
   };
+  matching_score: number;
+}
+
+interface APIIntroduction {
+  id: string;
+  person_a_id: string;
+  person_b_id: string;
+  matching_score: number;
+  status: string;
+  matching_rationale: {
+    source_reason: string;
+    target_reason: string;
+  };
+  people: Person;
+}
+
+interface APIResponse {
+  success: boolean;
+  introductions: APIIntroduction[];
 }
 
 export default function IntroductionsPage() {
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [personContext, setPersonContext] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
   const [suggestedIntroductions, setSuggestedIntroductions] = useState<SuggestedIntroduction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,6 +60,36 @@ export default function IntroductionsPage() {
       target: string;
     };
   } | null>(null);
+  const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [feedbackNotes, setFeedbackNotes] = useState<{ [key: string]: string }>({});
+  const [savedNotes, setSavedNotes] = useState<{ [key: string]: string }>({});
+
+  // Load person from URL parameter
+  useEffect(() => {
+    const personId = searchParams.get('personId');
+    if (personId && !selectedPerson) {
+      const loadPersonFromId = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('people')
+            .select('*')
+            .eq('id', personId)
+            .single();
+
+          if (error) throw error;
+          if (data) {
+            setSelectedPerson(data);
+            setSearchQuery(data.name);
+          }
+        } catch (err) {
+          console.error('Error loading person from ID:', err);
+        }
+      };
+
+      loadPersonFromId();
+    }
+  }, [searchParams, selectedPerson]);
 
   // Search people in Supabase
   useEffect(() => {
@@ -66,82 +123,67 @@ export default function IntroductionsPage() {
     return () => clearTimeout(debounceTimeout);
   }, [searchQuery]);
 
-  // Generate dummy suggested introductions when a person is selected
+  // Load existing introductions when a person is selected
   useEffect(() => {
-    if (selectedPerson) {
-      // This is dummy data - will be replaced with AI recommendations later
-      const dummyIntroductions: SuggestedIntroduction[] = [
-        {
-          person: {
-            id: '1',
-            name: 'Sarah Johnson',
-            title: 'Product Manager',
-            company: 'TechCorp',
-            image_url: '/placeholder-avatar.svg',
-          } as Person,
-          reasons: {
-            source: 'Both work in product management and share interest in AI',
-            target: 'Looking to expand network in enterprise software',
-          },
-        },
-        {
-          person: {
-            id: '2',
-            name: 'Michael Chen',
-            title: 'Engineering Lead',
-            company: 'StartupCo',
-            image_url: '/placeholder-avatar.svg',
-          } as Person,
-          reasons: {
-            source: 'Has experience scaling engineering teams',
-            target: 'Seeking mentorship in technical leadership',
-          },
-        },
-        {
-          person: {
-            id: '3',
-            name: 'Emma Davis',
-            title: 'VP of Sales',
-            company: 'GrowthInc',
-            image_url: '/placeholder-avatar.svg',
-          } as Person,
-          reasons: {
-            source: 'Strong network in enterprise sales',
-            target: 'Looking to connect with product leaders',
-          },
-        },
-        {
-          person: {
-            id: '4',
-            name: 'Alex Thompson',
-            title: 'Startup Founder',
-            company: 'InnovateLabs',
-            image_url: '/placeholder-avatar.svg',
-          } as Person,
-          reasons: {
-            source: 'Experience in startup ecosystem',
-            target: 'Seeking advisors in tech industry',
-          },
-        },
-        {
-          person: {
-            id: '5',
-            name: 'Rachel Kim',
-            title: 'Investment Associate',
-            company: 'VentureFund',
-            image_url: '/placeholder-avatar.svg',
-          } as Person,
-          reasons: {
-            source: 'Deep knowledge of startup funding',
-            target: 'Looking to expand portfolio in tech',
-          },
-        },
-      ];
+    async function fetchExistingIntroductions() {
+      if (!selectedPerson) {
+        setSuggestedIntroductions([]);
+        return;
+      }
 
-      setSuggestedIntroductions(dummyIntroductions);
-    } else {
-      setSuggestedIntroductions([]);
+      try {
+        const { data: introductions, error } = await supabase
+          .from('introductions')
+          .select(`
+            *,
+            people:person_b_id (*)
+          `)
+          .eq('person_a_id', selectedPerson.id)
+          .neq('status', 'skipped');
+
+        if (error) throw error;
+
+        if (introductions && introductions.length > 0) {
+          console.log('Raw introductions from DB:', introductions);
+          const transformedIntroductions: SuggestedIntroduction[] = introductions.map((intro) => {
+            console.log('Processing introduction:', {
+              id: intro.id,
+              raw_score: intro.matching_score,
+              score_type: typeof intro.matching_score
+            });
+            
+            // Ensure we have a valid number and convert if needed
+            let score = 0;
+            if (typeof intro.matching_score === 'string') {
+              score = parseFloat(intro.matching_score);
+            } else if (typeof intro.matching_score === 'number') {
+              score = intro.matching_score;
+            }
+            console.log('Processed score:', score);
+
+            return {
+              id: intro.id,
+              person: intro.people,
+              reasons: {
+                source: intro.matching_rationale.source_reason,
+                target: intro.matching_rationale.target_reason
+              },
+              matching_score: score
+            };
+          });
+
+          console.log('Transformed introductions:', transformedIntroductions);
+          setSuggestedIntroductions(transformedIntroductions);
+        } else {
+          setSuggestedIntroductions([]);
+        }
+      } catch (err) {
+        console.error('Error fetching existing introductions:', err);
+        setSuggestedIntroductions([]);
+      }
     }
+
+    fetchExistingIntroductions();
   }, [selectedPerson]);
 
   const handlePersonSelect = (person: Person) => {
@@ -151,7 +193,7 @@ export default function IntroductionsPage() {
   };
 
   const handleSearchFocus = () => {
-    if (searchQuery.trim()) {
+    if (searchQuery.trim() && (!selectedPerson || searchQuery !== selectedPerson.name)) {
       setIsDropdownOpen(true);
     }
   };
@@ -163,6 +205,174 @@ export default function IntroductionsPage() {
       reasons,
     });
     setShowEmailDialog(true);
+  };
+
+  const generateIntroductions = async () => {
+    if (!selectedPerson) return;
+    
+    setIsGenerating(true);
+    try {
+      // First, generate embeddings for the selected person
+      const embeddingResponse = await fetch('/api/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          personId: selectedPerson.id,
+          additionalContext: personContext.trim() || undefined
+        }),
+      });
+
+      if (!embeddingResponse.ok) throw new Error('Failed to generate embeddings');
+
+      // Now generate introductions using the updated embedding
+      const introResponse = await fetch('/api/introductions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personId: selectedPerson.id }),
+      });
+
+      if (!introResponse.ok) throw new Error('Failed to generate introductions');
+
+      const data = await introResponse.json();
+      console.log('API Response:', data);
+
+      if (!data?.introductions || !Array.isArray(data.introductions)) {
+        throw new Error('Invalid response format from API');
+      }
+
+      // Transform the data to match our UI format
+      const transformedIntroductions: SuggestedIntroduction[] = data.introductions.map((intro: APIIntroduction) => {
+        if (!intro?.people) {
+          console.error('Missing people data in introduction:', intro);
+          return null;
+        }
+
+        console.log('Processing API introduction:', {
+          id: intro.id,
+          raw_score: intro.matching_score,
+          score_type: typeof intro.matching_score
+        });
+
+        // Ensure we have a valid number and convert if needed
+        let score = 0;
+        if (typeof intro.matching_score === 'string') {
+          score = parseFloat(intro.matching_score);
+        } else if (typeof intro.matching_score === 'number') {
+          score = intro.matching_score;
+        }
+        console.log('Processed API score:', score);
+
+        return {
+          id: intro.id,
+          person: intro.people,
+          reasons: {
+            source: intro.matching_rationale.source_reason,
+            target: intro.matching_rationale.target_reason
+          },
+          matching_score: score
+        };
+      }).filter(Boolean) as SuggestedIntroduction[];
+
+      setSuggestedIntroductions(transformedIntroductions);
+      toast({
+        title: "Introductions Generated",
+        description: `Found ${transformedIntroductions.length} potential introductions.`,
+      });
+    } catch (error) {
+      console.error('Error generating introductions:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate introductions. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleUpdateIntroduction = async (introId: string, status: string, notes?: string) => {
+    try {
+      const { error } = await supabase
+        .from('introductions')
+        .update({ 
+          status: status,
+          admin_notes: notes || feedbackNotes[introId] || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', introId);
+
+      if (error) throw error;
+
+      // Remove the processed introduction from the list
+      setSuggestedIntroductions(prev => 
+        prev.filter(intro => intro.id !== introId)
+      );
+
+      // Clear the feedback for this introduction
+      setFeedbackNotes(prev => {
+        const newNotes = { ...prev };
+        delete newNotes[introId];
+        return newNotes;
+      });
+
+      toast({
+        title: "Success",
+        description: `Introduction ${status === 'skipped' ? 'skipped' : 'suggested'} successfully.`,
+      });
+    } catch (err) {
+      console.error('Error updating introduction:', err);
+      toast({
+        title: "Error",
+        description: "Failed to update introduction. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSkip = (intro: SuggestedIntroduction) => {
+    handleUpdateIntroduction(intro.id, 'skipped');
+  };
+
+  const handleSuggest = async (sourcePerson: Person, targetPerson: Person, reasons: { source: string; target: string }, introId: string) => {
+    // First update the introduction status
+    await handleUpdateIntroduction(introId, 'suggested');
+    
+    // Then show the email dialog
+    setEmailDialogProps({
+      sourcePerson,
+      targetPerson,
+      reasons,
+    });
+    setShowEmailDialog(true);
+  };
+
+  const handleSaveNotes = async (introId: string) => {
+    try {
+      const notes = feedbackNotes[introId];
+      if (!notes?.trim()) return;
+
+      const { error } = await supabase
+        .from('introductions')
+        .update({ 
+          admin_notes: notes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', introId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Feedback saved successfully.",
+      });
+    } catch (err) {
+      console.error('Error saving feedback:', err);
+      toast({
+        title: "Error",
+        description: "Failed to save feedback. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -189,7 +399,7 @@ export default function IntroductionsPage() {
         </div>
 
         {/* Search Results Dropdown */}
-        {isDropdownOpen && searchQuery && (
+        {isDropdownOpen && searchQuery && (!selectedPerson || searchQuery !== selectedPerson.name) && (
           <div className="absolute w-full mt-1 bg-white border rounded-lg shadow-lg max-h-80 overflow-y-auto z-10 divide-y">
             {isLoading ? (
               <div className="px-4 py-3 text-gray-500">Searching...</div>
@@ -228,27 +438,73 @@ export default function IntroductionsPage() {
         )}
       </div>
 
-      {/* Selected Person Profile */}
+      {/* Selected Person Profile and Context */}
       {selectedPerson && (
         <div className="space-y-8">
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={selectedPerson.image_url} alt={selectedPerson.name} />
-                  <AvatarFallback>
-                    {selectedPerson.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="text-2xl font-bold">{selectedPerson.name}</h2>
-                  {selectedPerson.title && (
-                    <p className="text-muted-foreground">{selectedPerson.title}</p>
-                  )}
-                  {selectedPerson.company && (
-                    <p className="text-muted-foreground">{selectedPerson.company}</p>
-                  )}
+            <CardContent className="pt-6 space-y-6">
+              <div className="flex items-start gap-8">
+                <div className="flex items-start gap-4">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={selectedPerson.image_url} alt={selectedPerson.name} />
+                    <AvatarFallback>
+                      {selectedPerson.name.split(' ').map(n => n[0]).join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h2 className="text-2xl font-bold">{selectedPerson.name}</h2>
+                    {selectedPerson.title && (
+                      <p className="text-muted-foreground">{selectedPerson.title}</p>
+                    )}
+                    {selectedPerson.company && (
+                      <p className="text-muted-foreground">{selectedPerson.company}</p>
+                    )}
+                  </div>
                 </div>
+                
+                {selectedPerson.summary && (
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground">{selectedPerson.summary}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-8 pt-4 border-t">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Looking for introductions to:</h3>
+                  <div className="text-sm prose prose-sm max-w-none">
+                    <ReactMarkdown>
+                      {selectedPerson.intros_sought || 'Not specified'}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Reasons to introduce:</h3>
+                  <div className="text-sm prose prose-sm max-w-none">
+                    <ReactMarkdown>
+                      {selectedPerson.reasons_to_introduce || 'Not specified'}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <Textarea
+                  placeholder={`Add any extra context you have around ${selectedPerson.name.split(' ')[0]}'s current needs or asks.`}
+                  value={personContext}
+                  onChange={(e) => setPersonContext(e.target.value)}
+                  className="min-h-[100px] resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button 
+                  size="lg" 
+                  onClick={generateIntroductions}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? "Generating..." : "Generate Introductions"}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -258,53 +514,151 @@ export default function IntroductionsPage() {
             <h3 className="text-xl font-semibold">Suggested Introductions</h3>
             <div className="grid gap-4">
               {suggestedIntroductions.map((intro) => (
-                <Card key={intro.person.id}>
+                <Card key={intro.id}>
                   <CardContent className="pt-6">
-                    <div className="flex items-start gap-4">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={intro.person.image_url} alt={intro.person.name} />
-                        <AvatarFallback>
-                          {intro.person.name.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-semibold">{intro.person.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {intro.person.title} at {intro.person.company}
-                            </p>
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={intro.person.image_url} alt={intro.person.name} />
+                          <AvatarFallback>
+                            {intro.person.name.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold">{intro.person.name}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {intro.person.title} at {intro.person.company}
+                              </p>
+                            </div>
+                            <div 
+                              className="px-3 py-1 rounded-md bg-blue-100/50 border border-blue-300 text-sm"
+                              title="Match score based on shared interests and goals"
+                            >
+                              {(() => {
+                                const score = typeof intro.matching_score === 'number' ? intro.matching_score : 0;
+                                return `Match Score: ${Math.round(score * 100)}%`;
+                              })()}
+                            </div>
+                          </div>
+                          <div className="mt-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                                Why {selectedPerson.name.split(' ')[0]} should connect
+                              </h5>
+                              <p className="text-sm">{intro.reasons.source}</p>
+                            </div>
+                            <div>
+                              <h5 className="text-sm font-medium text-muted-foreground mb-1">
+                                Why {intro.person.name.split(' ')[0]} would be interested
+                              </h5>
+                              <p className="text-sm">{intro.reasons.target}</p>
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-4 grid grid-cols-2 gap-4">
-                          <div>
-                            <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                              Why {selectedPerson.name.split(' ')[0]} should connect
-                            </h5>
-                            <p className="text-sm">{intro.reasons.source}</p>
-                          </div>
-                          <div>
-                            <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                              Why {intro.person.name.split(' ')[0]} would be interested
-                            </h5>
-                            <p className="text-sm">{intro.reasons.target}</p>
-                          </div>
-                        </div>
-                        <div className="mt-4 flex gap-2 justify-end">
+                      </div>
+                      
+                      <div className="pt-4 border-t flex items-start gap-4">
+                        <div className="flex flex-col gap-2 w-[300px]">
+                          <Textarea 
+                            placeholder="share feedback on this recommendation with the AI"
+                            className="min-h-[60px] resize-none w-full"
+                            value={feedbackNotes[intro.id] || ''}
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              setFeedbackNotes(prev => ({
+                                ...prev,
+                                [intro.id]: newValue
+                              }));
+                              // Clear saved status if the new value is different from saved value
+                              if (newValue !== savedNotes[intro.id]) {
+                                setSavedNotes(prev => {
+                                  const newSaved = { ...prev };
+                                  delete newSaved[intro.id];
+                                  return newSaved;
+                                });
+                              }
+                            }}
+                          />
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleSuggestIntroduction(selectedPerson, intro.person, intro.reasons)}
+                            className={`w-full relative transition-colors ${
+                              savedNotes[intro.id] === feedbackNotes[intro.id] && feedbackNotes[intro.id]?.trim()
+                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                                : 'bg-gray-50 hover:bg-gray-100'
+                            }`}
+                            onClick={async () => {
+                              const notes = feedbackNotes[intro.id];
+                              console.log('Saving feedback for intro:', intro.id);
+                              console.log('Notes content:', notes);
+                              
+                              if (!notes?.trim()) return;
+
+                              const { data, error } = await supabase
+                                .from('introductions')
+                                .update({ 
+                                  admin_notes: notes,
+                                  updated_at: new Date().toISOString()
+                                })
+                                .eq('id', intro.id);
+
+                              if (error) {
+                                console.error('Error saving feedback:', error);
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to save feedback. Please try again.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
+                              console.log('Feedback saved successfully:', data);
+                              setSavedNotes(prev => ({
+                                ...prev,
+                                [intro.id]: notes
+                              }));
+                              toast({
+                                title: "Success",
+                                description: "Feedback saved successfully.",
+                              });
+                            }}
+                          >
+                            <span className="flex items-center gap-2">
+                              Save Feedback
+                              {savedNotes[intro.id] === feedbackNotes[intro.id] && feedbackNotes[intro.id]?.trim() && (
+                                <Check className="h-4 w-4 text-green-600" />
+                              )}
+                            </span>
+                          </Button>
+                        </div>
+                        <div className="flex-1" />
+                        <div className="flex items-center gap-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 bg-red-50 hover:bg-red-100 border-red-200"
+                            onClick={() => handleSkip(intro)}
+                          >
+                            Skip (with reason)
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-blue-50 hover:bg-blue-100 border-blue-200"
+                            onClick={() => handleSuggest(selectedPerson, intro.person, intro.reasons, intro.id)}
                           >
                             Suggest to {selectedPerson.name.split(' ')[0]}
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleSuggestIntroduction(intro.person, selectedPerson, {
+                            className="bg-indigo-50 hover:bg-indigo-100 border-indigo-200"
+                            onClick={() => handleSuggest(intro.person, selectedPerson, {
                               source: intro.reasons.target,
                               target: intro.reasons.source,
-                            })}
+                            }, intro.id)}
                           >
                             Suggest to {intro.person.name.split(' ')[0]}
                           </Button>

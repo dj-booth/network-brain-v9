@@ -18,6 +18,8 @@ export type Person = {
   detailed_summary?: string;
   image_url?: string;
   last_contact?: string;
+  intros_sought?: string;
+  reasons_to_introduce?: string;
 };
 
 export type Note = {

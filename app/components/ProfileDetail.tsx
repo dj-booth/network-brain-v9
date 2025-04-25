@@ -9,12 +9,14 @@ import { CommunitySelector } from './CommunitySelector';
 import { Timeline } from './Timeline';
 import { toast } from 'sonner';
 import { AddContextDialog } from './AddContextDialog';
+import { useRouter } from 'next/navigation';
 
 interface ProfileDetailProps {
   contact: Contact;
 }
 
 export function ProfileDetail({ contact }: ProfileDetailProps) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [editedContact, setEditedContact] = useState(contact);
   const [isSaving, setIsSaving] = useState(false);
@@ -196,6 +198,12 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                 onClick={() => setShowCommunitySelector(true)}
               >
                 Add to Community
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/introductions?personId=${contact.id}`)}
+              >
+                Suggest Intros
               </Button>
               <Button
                 variant="outline"

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -36,7 +37,16 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      <div className="p-4 flex justify-end">
+      <div className="p-2 flex items-center justify-between">
+        <Link href="/" className={cn('transition-all duration-300', collapsed ? 'w-5' : 'w-20')}>
+          <Image
+            src="/logo.png"
+            alt="Network Brain Logo"
+            width={collapsed ? 20 : 80}
+            height={collapsed ? 20 : 80}
+            className="transition-all duration-300"
+          />
+        </Link>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="p-2 rounded-lg hover:bg-accent"
