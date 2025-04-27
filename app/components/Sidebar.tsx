@@ -13,7 +13,8 @@ import {
   Inbox,
   Settings,
   Calendar,
-  Users
+  Users,
+  Upload
 } from 'lucide-react';
 
 const menuItems = [
@@ -22,6 +23,7 @@ const menuItems = [
   { name: 'Communities', path: '/communities', icon: Users },
   { name: 'Events', path: '/events', icon: Calendar },
   { name: 'Add Context', path: '/add-context', icon: PlusCircle },
+  { name: 'Import Data', path: '/import', icon: Upload },
   { name: 'Inbox', path: '/inbox', icon: Inbox },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];

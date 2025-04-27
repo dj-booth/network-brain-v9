@@ -1,15 +1,34 @@
-export interface Contact {
+export interface ProfileFields {
   id: string;
   name: string;
-  title: string;
-  company: string;
-  summary: string;
+  email?: string;
+  title?: string;
+  company?: string;
+  location?: string;
+  phone?: string;
+  linkedinUrl?: string;
   imageUrl: string;
-  email: string;
+  summary?: string;
+  detailedSummary?: string;
+  currentFocus?: string;
+  startupExperience?: string;
+  lastStartupRole?: string;
+  preferredRole?: string;
+  preferredCompanyStage?: string;
+  longTermGoal?: string;
+  skills?: string[];
+  interests?: string[];
+  introsSought?: string;
+  reasonsToIntroduce?: string;
+  referralSource?: string;
+  internalNotes?: string;
   lastContact?: string;
-  detailedSummary: string;
-  introsSought: string;
-  reasonsToIntroduce: string;
+}
+
+export interface Contact extends Partial<Omit<ProfileFields, 'id' | 'name' | 'imageUrl'>> {
+  id: string;
+  name: string;
+  imageUrl: string;
 }
 
 // Add the new type for community membership status
