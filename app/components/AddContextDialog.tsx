@@ -73,17 +73,24 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
       
       // Call the callback to refresh timeline
       onNoteAdded?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Full error object:', error);
+      let message = 'Please try again.';
+      let details, hint, code;
+      if (error && typeof error === 'object' && 'message' in error) {
+        message = (error as { message?: string }).message || message;
+        details = (error as { details?: string }).details;
+        hint = (error as { hint?: string }).hint;
+        code = (error as { code?: string }).code;
+      }
       console.error('Error saving note:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
+        message,
+        details,
+        hint,
+        code
       });
-      
       toast.error('Error saving note', {
-        description: error.message || 'Please try again.',
+        description: message,
       });
     } finally {
       setIsLoading(false);

@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { supabase } from '@/lib/supabase';
+import { supabase, type Person } from '@/lib/supabase';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Helper function to prepare text for embedding
-function prepareTextForEmbedding(person: any, additionalContext?: string) {
+function prepareTextForEmbedding(person: Person, additionalContext?: string) {
   const parts = [
     `Name: ${person.name}`,
     person.title && `Title: ${person.title}`,

@@ -7,24 +7,24 @@ import { cookies } from 'next/headers';
 // import { encrypt, decrypt } from '@/lib/encryption'; // Placeholder
 
 // Create Supabase client outside the handler for Route Handler pattern
-const createSupabaseClient = () => {
-  const cookieStore = cookies();
+const createSupabaseClient = async () => {
+  const cookieStore = await cookies();
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
+        async get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: CookieOptions) {
+        async set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
             // Errors can be ignored in Route Handlers
           }
         },
-        remove(name: string, options: CookieOptions) {
+        async remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
           } catch (error) {
@@ -37,7 +37,7 @@ const createSupabaseClient = () => {
 };
 
 export async function GET(request: NextRequest) {
-  const supabase = createSupabaseClient();
+  const supabase = await createSupabaseClient();
 
   // Use the request object directly for getSession in Route Handlers
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -123,9 +123,13 @@ export async function GET(request: NextRequest) {
     settingsUrl.searchParams.set('google_auth_success', 'true');
     return NextResponse.redirect(settingsUrl);
 
-  } catch (err: any) {
+  } catch (err: unknown) {
+    let message = 'Token exchange failed';
+    if (err && typeof err === 'object' && 'message' in err) {
+      message = (err as { message?: string }).message || message;
+    }
     console.error('Error exchanging Google token:', err);
-    settingsUrl.searchParams.set('google_auth_error', err.message || 'Token exchange failed');
+    settingsUrl.searchParams.set('google_auth_error', message);
     return NextResponse.redirect(settingsUrl);
   }
 } 

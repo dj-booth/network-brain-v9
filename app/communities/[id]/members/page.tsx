@@ -1,4 +1,5 @@
 import { MembersList } from '@/components/ui/MembersList';
+import { type Metadata, type ResolvingMetadata } from 'next';
 
 interface PageProps {
   params: {

@@ -40,13 +40,13 @@ export function Timeline({ personId, refreshTrigger = 0 }: TimelineProps) {
       
       // Combine and sort items
       const newItems = [
-        ...notesData.map((note: any) => ({
+        ...notesData.map((note: Record<string, unknown>) => ({
           id: note.id,
           type: 'note' as const,
           content: note.content,
           timestamp: note.created_at,
         })),
-        ...eventsData.map((event: any) => ({
+        ...eventsData.map((event: Record<string, unknown>) => ({
           id: event.id,
           type: 'event' as const,
           content: event.description,

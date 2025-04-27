@@ -63,6 +63,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
 
   useEffect(() => {
     fetchMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [communityId]);
 
   const fetchMembers = async () => {
@@ -86,11 +87,12 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
 
       const transformedMembers = data
         ?.map(item => {
-          const personData = (item as any).person;
+          const safeItem = item as any;
+          const personData = safeItem.person as Member | undefined;
           if (!personData) return null;
           return {
             ...personData,
-            membership_status: (item as any).membership_status as CommunityMembershipStatus | null
+            membership_status: safeItem.membership_status ?? null
           } as Member;
         })
         .filter((member): member is Member => member !== null) || [];

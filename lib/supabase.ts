@@ -51,7 +51,7 @@ export type Community = {
   social_links?: Record<string, string>;
   contact_email?: string;
   created_by?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 export type Event = {

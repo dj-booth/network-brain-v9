@@ -119,7 +119,7 @@ export default function EventsPage() {
     }
   };
 
-  const handleEditChange = (field: keyof Event, value: any) => {
+  const handleEditChange = (field: keyof Event, value: string | number | null) => {
     setEditedEvent(prev => ({ ...prev, [field]: value }));
   };
 

@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies, type ReadonlyRequestCookies } from 'next/headers';
+import { cookies } from 'next/headers';
 
 // No longer need placeholder
 // const TARGET_USER_ID = '...';
 
 // Corrected Supabase client creation for Route Handlers
-const createSupabaseClient = (cookieStore: ReadonlyRequestCookies) => {
+const createSupabaseClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) => {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -38,7 +38,7 @@ const createSupabaseClient = (cookieStore: ReadonlyRequestCookies) => {
 };
 
 export async function POST() { // Using POST as this triggers an action
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createSupabaseClient(cookieStore);
 
   // Get the logged-in user's session
@@ -148,16 +148,25 @@ export async function POST() { // Using POST as this triggers an action
         //   .update({ google_calendar_event_id: createdEvent.data.id })
         //   .eq('id', event.id);
 
-      } catch (apiError: any) {
-        console.error(`Error syncing event ${event.id} to Google Calendar:`, apiError.message || apiError);
+      } catch (apiError: unknown) {
+        if (apiError && typeof apiError === 'object' && 'message' in apiError) {
+          console.error(`Error syncing event ${event.id} to Google Calendar:`, (apiError as { message?: string }).message);
+        } else {
+          console.error(`Error syncing event ${event.id} to Google Calendar:`, apiError);
+        }
         // Decide if we should continue with other events or stop
       }
     }
 
     return NextResponse.json({ message: `Successfully processed ${events.length} events.` });
 
-  } catch (error: any) {
-    console.error('Error in event sync:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'message' in error) {
+      console.error('Error in event sync:', (error as { message?: string }).message);
+      return NextResponse.json({ error: (error as { message?: string }).message || 'Internal server error' }, { status: 500 });
+    } else {
+      console.error('Error in event sync:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
   }
 } 

@@ -64,10 +64,14 @@ export function CreatePersonModal({ open, onOpenChange, onPersonCreated }: Creat
       onOpenChange(false);
       onPersonCreated?.();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let message = 'An error occurred.';
+      if (error && typeof error === 'object' && 'message' in error) {
+        message = (error as { message?: string }).message || message;
+      }
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     } finally {

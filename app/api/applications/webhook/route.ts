@@ -23,7 +23,7 @@ interface ApplicationData {
   co_founders?: string;
   timeline?: string;
   sectors?: string;
-  [key: string]: any; // For any additional fields that will go into application_metadata
+  [key: string]: unknown; // For any additional fields that will go into application_metadata
 }
 
 // Something New community ID
@@ -56,10 +56,13 @@ export async function POST(request: Request) {
 
     // Helper function to find answer for a specific question
     const findAnswer = (questionPart: string) => {
-      const item = transcriptItems.find((item: any) => 
-        item.question?.toLowerCase().includes(questionPart.toLowerCase())
-      );
-      return item?.answer || null;
+      const item = transcriptItems.find((item: unknown) => {
+        if (typeof item === 'object' && item !== null && 'question' in item && typeof (item as { question?: string }).question === 'string') {
+          return (item as { question?: string }).question!.toLowerCase().includes(questionPart.toLowerCase());
+        }
+        return false;
+      });
+      return (item && typeof item === 'object' && item !== null && 'answer' in item) ? (item as { answer?: string }).answer : null;
     };
 
     // Extract fields from transcript
