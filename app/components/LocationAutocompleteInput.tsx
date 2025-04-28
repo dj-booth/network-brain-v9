@@ -21,7 +21,7 @@ export function LocationAutocompleteInput({
   placeholder 
 }: LocationAutocompleteInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteRef = useRef<any>(null);
   const [isApiLoaded, setIsApiLoaded] = useState(isLoaded);
   const [apiKeyError, setApiKeyError] = useState(false);
 

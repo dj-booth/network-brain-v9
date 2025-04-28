@@ -20,7 +20,6 @@ export function Example() {
       <SortableList
         items={items}
         onReorder={setItems}
-        className="space-y-2"
       />
     </div>
   );

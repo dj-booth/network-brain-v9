@@ -7,7 +7,7 @@ import { cookies } from 'next/headers';
 // const TARGET_USER_ID = '...';
 
 // Corrected Supabase client creation for Route Handlers
-const createSupabaseClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) => {
+const createSupabaseClient = (cookieStore: Awaited<Awaited<ReturnType<typeof cookies>>>) => {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

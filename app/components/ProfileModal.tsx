@@ -59,17 +59,37 @@ export function ProfileModal({ contact, onClose }: ProfileModalProps) {
           {/* Intros Sought */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Looking to Connect With</h3>
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {contact.introsSought || 'No connection preferences specified'}
-            </p>
+            {Array.isArray(contact.introsSought) && contact.introsSought.length > 0 ? (
+              <ul className="list-disc pl-5 space-y-1">
+                {contact.introsSought.map((item, idx) => (
+                  <li key={idx}>
+                    <span className="font-medium">{item.title}:</span> {item.description}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                No connection preferences specified
+              </p>
+            )}
           </div>
 
           {/* Reasons to Introduce */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Ways {contact.name.split(' ')[0]} Can Help</h3>
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {contact.reasonsToIntroduce || 'No ways to help specified'}
-            </p>
+            {Array.isArray(contact.reasonsToIntroduce) && contact.reasonsToIntroduce.length > 0 ? (
+              <ul className="list-disc pl-5 space-y-1">
+                {contact.reasonsToIntroduce.map((item, idx) => (
+                  <li key={idx}>
+                    <span className="font-medium">{item.title}:</span> {item.description}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                No ways to help specified
+              </p>
+            )}
           </div>
         </div>
       </div>

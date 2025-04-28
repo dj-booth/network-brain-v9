@@ -1,3 +1,8 @@
+export interface IntroReason {
+  title: string;
+  description: string;
+}
+
 export interface ProfileFields {
   id: string;
   name: string;
@@ -18,8 +23,8 @@ export interface ProfileFields {
   longTermGoal?: string;
   skills?: string[];
   interests?: string[];
-  introsSought?: string;
-  reasonsToIntroduce?: string;
+  introsSought?: IntroReason[];
+  reasonsToIntroduce?: IntroReason[];
   referralSource?: string;
   internalNotes?: string;
   lastContact?: string;

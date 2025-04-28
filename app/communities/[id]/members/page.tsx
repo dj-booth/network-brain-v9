@@ -1,11 +1,7 @@
 import { MembersList } from '@/components/ui/MembersList';
 import { type Metadata, type ResolvingMetadata } from 'next';
 
-interface PageProps {
-  params: {
-    id: string;
-  };
-}
+type Params = Promise<{ id: string }>;
 
 type MemberStatus = 'Prospect' | 'Applied' | 'Approved' | 'Inactive';
 
@@ -17,7 +13,8 @@ type Member = {
   status: MemberStatus;
 };
 
-export default function CommunityPage({ params }: PageProps) {
+export default async function CommunityPage({ params }: { params: Params }) {
+  const { id } = await params;
   // This would typically come from your API/database
   const members: Member[] = [
     {
@@ -89,11 +86,7 @@ export default function CommunityPage({ params }: PageProps) {
         <h1 className="text-2xl font-bold text-gray-900">Community Members</h1>
         <p className="text-gray-600">Drag and drop members to change their status</p>
       </div>
-      
-      <MembersList
-        initialMembers={members}
-        onStatusChange={handleStatusChange}
-      />
+      <MembersList initialMembers={members} onStatusChange={handleStatusChange} />
     </div>
   );
 } 

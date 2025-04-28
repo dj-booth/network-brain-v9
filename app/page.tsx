@@ -71,8 +71,12 @@ export default function HomePage() {
     detailedSummary: selectedPerson.detailed_summary || '',
     imageUrl: selectedPerson.image_url,
     lastContact: selectedPerson.last_contact || undefined,
-    introsSought: selectedPerson.intros_sought || '',
-    reasonsToIntroduce: selectedPerson.reasons_to_introduce || '',
+    introsSought: selectedPerson.intros_sought
+      ? [{ title: 'Connection', description: selectedPerson.intros_sought }]
+      : [],
+    reasonsToIntroduce: selectedPerson.reasons_to_introduce
+      ? [{ title: 'Reason', description: selectedPerson.reasons_to_introduce }]
+      : [],
   } : null;
 
   const PeopleList = () => (
