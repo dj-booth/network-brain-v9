@@ -81,6 +81,12 @@ export default function AddContextPage() {
       setError(null);
       setSuccessMessage(null);
 
+      console.log('Attempting to save note:', {
+        personId: selectedPerson.id,
+        contentLength: noteContent.trim().length,
+        noteType
+      });
+
       const { error } = await supabase
         .from('notes')
         .insert({
@@ -89,7 +95,16 @@ export default function AddContextPage() {
           type: noteType,
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Detailed error saving note:', {
+          error,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
 
       // Show success message
       setSuccessMessage(`Note added for ${selectedPerson.name}`);
