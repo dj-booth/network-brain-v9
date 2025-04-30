@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     const { personId } = await request.json();
 
     if (!personId) {
+      console.error('Profile generation error: Missing personId');
       return NextResponse.json({ error: 'Person ID is required' }, { status: 400 });
     }
 
@@ -58,8 +59,12 @@ export async function POST(request: Request) {
       .eq('id', personId)
       .single();
 
-    if (personError) throw personError;
+    if (personError) {
+      console.error('Profile generation error - Failed to fetch person:', personError);
+      throw personError;
+    }
     if (!person) {
+      console.error('Profile generation error - Person not found:', personId);
       return NextResponse.json({ error: 'Person not found' }, { status: 404 });
     }
 
@@ -70,7 +75,10 @@ export async function POST(request: Request) {
       .eq('person_id', personId)
       .order('created_at', { ascending: false });
 
-    if (notesError) throw notesError;
+    if (notesError) {
+      console.error('Profile generation error - Failed to fetch notes:', notesError);
+      throw notesError;
+    }
 
     const { data: events, error: eventsError } = await supabase
       .from('events')
@@ -86,7 +94,10 @@ export async function POST(request: Request) {
       .eq('event_attendees.person_id', personId)
       .order('start_time', { ascending: false });
 
-    if (eventsError) throw eventsError;
+    if (eventsError) {
+      console.error('Profile generation error - Failed to fetch events:', eventsError);
+      throw eventsError;
+    }
 
     // 3. Fetch community memberships
     const { data: memberships, error: membershipError } = await supabase
@@ -101,7 +112,15 @@ export async function POST(request: Request) {
       `)
       .eq('person_id', personId);
 
-    if (membershipError) throw membershipError;
+    if (membershipError) {
+      console.error('Profile generation error - Failed to fetch memberships:', membershipError);
+      throw membershipError;
+    }
+
+    // Check if we have any data to generate from
+    if (!notes?.length && !events?.length && !memberships?.length) {
+      console.warn('Profile generation warning - No timeline data available for:', personId);
+    }
 
     // 4. Prepare the context for OpenAI
     const context = {
@@ -153,23 +172,92 @@ Rules for each section:
 
 Format the response as a JSON object with these exact keys: summary, detailed_summary, intros_sought, reasons_to_introduce`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: JSON.stringify(context)
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    });
+    let completion;
+    try {
+      // Check OpenAI configuration
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OpenAI API key is not configured. Please add OPENAI_API_KEY to your environment variables.');
+      }
 
-    const generatedContent = JSON.parse(completion.choices[0].message.content || '{}');
+      console.log('Profile generation - Sending request to OpenAI with context:', {
+        personId,
+        contextLength: JSON.stringify(context).length,
+        hasNotes: notes?.length > 0,
+        hasEvents: events?.length > 0,
+        hasMemberships: memberships?.length > 0,
+        hasOpenAIKey: !!process.env.OPENAI_API_KEY
+      });
+
+      completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: JSON.stringify(context)
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      });
+
+      console.log('Profile generation - Received OpenAI response:', {
+        status: 'success',
+        hasContent: !!completion?.choices?.[0]?.message?.content,
+        contentLength: completion?.choices?.[0]?.message?.content?.length
+      });
+
+    } catch (openaiError: any) {
+      // Log the complete error object for debugging
+      console.error('Profile generation error - OpenAI API error details:', {
+        error: openaiError,
+        message: openaiError.message,
+        type: openaiError.type,
+        status: openaiError.status,
+        code: openaiError.code,
+        stack: openaiError.stack,
+        response: openaiError.response?.data
+      });
+      
+      // Handle specific OpenAI error cases
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OpenAI API key is not configured');
+      } else if (openaiError.status === 401) {
+        throw new Error('OpenAI API key is invalid or expired');
+      } else if (openaiError.status === 429) {
+        throw new Error('OpenAI API rate limit exceeded - please try again in a few minutes');
+      } else if (openaiError.status === 500) {
+        throw new Error('OpenAI API internal server error - please try again');
+      } else if (openaiError.response?.data?.error?.message) {
+        throw new Error(`OpenAI API error: ${openaiError.response.data.error.message}`);
+      }
+      
+      throw openaiError; // Throw the original error if none of the above cases match
+    }
+
+    if (!completion?.choices?.[0]?.message?.content) {
+      console.error('Profile generation error - Empty OpenAI response');
+      throw new Error('Empty response from AI');
+    }
+
+    let generatedContent;
+    try {
+      generatedContent = JSON.parse(completion.choices[0].message.content);
+    } catch (parseError) {
+      console.error('Profile generation error - Failed to parse OpenAI response:', parseError);
+      throw new Error('Invalid response format from AI');
+    }
+
+    // Validate the generated content
+    const requiredFields = ['summary', 'detailed_summary', 'intros_sought', 'reasons_to_introduce'];
+    const missingFields = requiredFields.filter(field => !generatedContent[field]);
+    if (missingFields.length > 0) {
+      console.error('Profile generation error - Missing fields in generated content:', missingFields);
+      throw new Error(`Generated content missing required fields: ${missingFields.join(', ')}`);
+    }
 
     // 6. Update the person record
     const { error: updateError } = await supabase
@@ -183,7 +271,10 @@ Format the response as a JSON object with these exact keys: summary, detailed_su
       })
       .eq('id', personId);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('Profile generation error - Failed to update person record:', updateError);
+      throw updateError;
+    }
 
     return NextResponse.json({
       success: true,
@@ -192,8 +283,9 @@ Format the response as a JSON object with these exact keys: summary, detailed_su
 
   } catch (error) {
     console.error('Profile generation error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return NextResponse.json(
-      { error: 'Failed to generate profile' },
+      { error: `Failed to generate profile: ${errorMessage}` },
       { status: 500 }
     );
   }

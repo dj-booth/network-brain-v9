@@ -219,32 +219,96 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
+      // Check if we have a valid contact ID
+      if (!contact.id) {
+        throw new Error('Invalid contact ID');
+      }
+
+      console.log('Starting profile generation for:', {
+        contactId: contact.id,
+        name: contact.name
+      });
+
       const response = await fetch('/api/profile/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personId: contact.id })
       });
 
+      const data = await response.json();
+      console.log('Profile generation response:', {
+        status: response.status,
+        ok: response.ok,
+        data: data
+      });
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate profile');
+        // Extract the error message from the response
+        const errorMessage = data.error || `Server error (${response.status})`;
+        console.error('Profile generation failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
-      const { data } = await response.json();
+      if (!data.data) {
+        console.error('Invalid response format:', data);
+        throw new Error('No data returned from profile generation');
+      }
       
       // Update the local state with the generated content
       setEditedContact(prev => ({
         ...prev,
-        summary: data.summary,
-        detailedSummary: data.detailed_summary,
-        introsSought: data.intros_sought,
-        reasonsToIntroduce: data.reasons_to_introduce
+        summary: data.data.summary,
+        detailedSummary: data.data.detailed_summary,
+        introsSought: data.data.intros_sought,
+        reasonsToIntroduce: data.data.reasons_to_introduce
       }));
 
-      toast.success('Profile generated successfully');
+      // Save the changes immediately
+      console.log('Saving generated profile to database');
+      const { error: saveError } = await supabase
+        .from('people')
+        .update({
+          summary: data.data.summary,
+          detailed_summary: data.data.detailed_summary,
+          intros_sought: data.data.intros_sought,
+          reasons_to_introduce: data.data.reasons_to_introduce,
+          last_generated_at: new Date().toISOString()
+        })
+        .eq('id', contact.id);
+
+      if (saveError) {
+        console.error('Error saving generated profile:', saveError);
+        throw new Error('Generated profile but failed to save changes');
+      }
+
+      // Force a refresh of the timeline
+      setTimelineRefreshTrigger(prev => prev + 1);
+
+      toast.success('Profile generated successfully', {
+        description: 'AI has analyzed the timeline and updated the profile.'
+      });
     } catch (error) {
-      console.error('Error generating profile:', error);
-      toast.error('Failed to generate profile');
+      console.error('Error generating profile:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Show a more detailed error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const isConfigError = errorMessage.includes('API key');
+      
+      toast.error('Failed to generate profile', {
+        description: errorMessage,
+        duration: 5000, // Show for longer
+        action: isConfigError ? {
+          label: 'Contact Admin',
+          onClick: () => {
+            // You could add a mailto link or other contact method here
+            window.location.href = 'mailto:admin@example.com?subject=OpenAI%20API%20Configuration%20Issue';
+          }
+        } : undefined
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -279,18 +343,27 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
       {/* Header */}
       <div className="sticky top-0 bg-background border-b p-4 flex justify-between items-center">
         <h2 className="text-2xl font-semibold">{contact.name}</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-          disabled={isSaving}
-        >
-          {isEditing ? (
-            <CheckIcon className="h-4 w-4" />
-          ) : (
-            <PencilIcon className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleGenerate}
+            disabled={isGenerating}
+          >
+            {isGenerating ? 'Generating...' : 'Generate'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+            disabled={isSaving}
+          >
+            {isEditing ? (
+              <CheckIcon className="h-4 w-4" />
+            ) : (
+              <PencilIcon className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
