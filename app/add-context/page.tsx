@@ -16,6 +16,11 @@ export default function AddContextPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [noteType, setNoteType] = useState<'text' | 'transcription'>('text');
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserTitle, setNewUserTitle] = useState('');
+  const [newUserCompany, setNewUserCompany] = useState('');
+  const [addUserLoading, setAddUserLoading] = useState(false);
 
   // Search people in Supabase
   useEffect(() => {
@@ -106,6 +111,33 @@ export default function AddContextPage() {
     }
   };
 
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim()) return;
+    setAddUserLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('people')
+        .insert({ name: newUserName.trim(), title: newUserTitle.trim() || null, company: newUserCompany.trim() || null })
+        .select()
+        .single();
+      if (error) throw error;
+      setSelectedPerson(data);
+      setSearchQuery(data.name);
+      setShowAddUserForm(false);
+      setIsDropdownOpen(false);
+      setNewUserName('');
+      setNewUserTitle('');
+      setNewUserCompany('');
+    } catch (err) {
+      setError('Failed to add user');
+      console.error('Error adding user:', err);
+    } finally {
+      setAddUserLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -148,7 +180,59 @@ export default function AddContextPage() {
               {isLoading ? (
                 <div className="px-4 py-3 text-gray-500">Searching...</div>
               ) : people.length === 0 ? (
-                <div className="px-4 py-3 text-gray-500">No results found</div>
+                <div className="px-4 py-3 text-gray-500 flex flex-col gap-2">
+                  <span>No results found</span>
+                  {showAddUserForm ? (
+                    <form onSubmit={handleAddUser} className="flex flex-col gap-2 mt-2">
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1"
+                        placeholder="Name*"
+                        value={newUserName}
+                        onChange={e => setNewUserName(e.target.value)}
+                        required
+                      />
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1"
+                        placeholder="Title (optional)"
+                        value={newUserTitle}
+                        onChange={e => setNewUserTitle(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1"
+                        placeholder="Company (optional)"
+                        value={newUserCompany}
+                        onChange={e => setNewUserCompany(e.target.value)}
+                      />
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          type="submit"
+                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                          disabled={addUserLoading || !newUserName.trim()}
+                        >
+                          {addUserLoading ? 'Adding...' : 'Add User'}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-3 py-1 border rounded"
+                          onClick={() => setShowAddUserForm(false)}
+                          disabled={addUserLoading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      className="mt-2 px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      onClick={() => setShowAddUserForm(true)}
+                    >
+                      + Add new user
+                    </button>
+                  )}
+                </div>
               ) : (
                 people.map(person => (
                   <button

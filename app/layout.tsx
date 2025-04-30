@@ -24,11 +24,6 @@ export default async function RootLayout({
     <html lang="en">
       <body className={`${inter.className} bg-background text-foreground`}>
         <div className="flex min-h-screen">
-          {/* DEBUG: Show session info */}
-          <div style={{ position: 'absolute', top: 0, left: 0, background: '#fffbe6', color: '#333', zIndex: 9999, padding: 8, fontSize: 12 }}>
-            <strong>Session present:</strong> {session ? 'Yes' : 'No'}<br />
-            <strong>Session object:</strong> <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(session, null, 2)}</pre>
-          </div>
           <Sidebar />
           <main className={`flex-1 p-8`}>
             {children}
