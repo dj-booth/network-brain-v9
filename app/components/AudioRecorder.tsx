@@ -3,9 +3,10 @@ import { Mic, Square, Loader2 } from 'lucide-react';
 
 interface AudioRecorderProps {
   onTranscriptionComplete: (text: string) => void;
+  disabled?: boolean;
 }
 
-export function AudioRecorder({ onTranscriptionComplete }: AudioRecorderProps) {
+export function AudioRecorder({ onTranscriptionComplete, disabled = false }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -114,16 +115,21 @@ export function AudioRecorder({ onTranscriptionComplete }: AudioRecorderProps) {
         {!isRecording ? (
           <button
             onClick={startRecording}
-            className="p-3 rounded-lg bg-gray-600 hover:bg-gray-700 transition-colors"
-            disabled={isProcessing}
-            title="Start recording"
+            className={`p-3 rounded-lg transition-colors ${
+              disabled || isProcessing
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-gray-600 hover:bg-gray-700'
+            }`}
+            disabled={disabled || isProcessing}
+            title={disabled ? 'Recording disabled' : 'Start recording'}
           >
-            <Mic className={`h-6 w-6 ${isProcessing ? 'text-gray-300' : 'text-white'}`} />
+            <Mic className={`h-6 w-6 ${(disabled || isProcessing) ? 'text-gray-300' : 'text-white'}`} />
           </button>
         ) : (
           <button
             onClick={stopRecording}
             className="p-3 rounded-lg bg-red-600 hover:bg-red-700 transition-colors relative"
+            disabled={disabled}
             title="Stop recording"
           >
             <Square className="h-6 w-6 text-white" />

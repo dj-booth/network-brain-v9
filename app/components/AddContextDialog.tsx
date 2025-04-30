@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,14 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
   const [noteContent, setNoteContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [noteType, setNoteType] = useState<'text' | 'voice'>('text');
+
+  // Reset form when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setNoteContent('');
+      setNoteType('text');
+    }
+  }, [open]);
 
   const handleTranscriptionComplete = (transcribedText: string) => {
     setNoteContent(transcribedText);
@@ -62,10 +70,6 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
 
       console.log('Note saved successfully:', data);
 
-      toast.success('Note added', {
-        description: `Successfully added note for ${contact.name}`,
-      });
-
       // Reset form and close dialog
       setNoteContent('');
       setNoteType('text');
@@ -73,6 +77,10 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
       
       // Call the callback to refresh timeline
       onNoteAdded?.();
+
+      toast.success('Note added', {
+        description: `Successfully added note for ${contact.name}`,
+      });
     } catch (error: unknown) {
       console.error('Full error object:', error);
       let message = 'Please try again.';
@@ -98,7 +106,13 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog 
+      open={open} 
+      onOpenChange={(newOpen) => {
+        if (!newOpen && isLoading) return; // Prevent closing while saving
+        onOpenChange(newOpen);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Context</DialogTitle>
@@ -116,13 +130,18 @@ export function AddContextDialog({ contact, open, onOpenChange, onNoteAdded }: A
               setNoteType('text');
             }}
             className="min-h-[100px]"
+            disabled={isLoading}
           />
           <div className="flex justify-end items-center gap-3">
-            <AudioRecorder onTranscriptionComplete={handleTranscriptionComplete} />
+            <AudioRecorder 
+              onTranscriptionComplete={handleTranscriptionComplete}
+              disabled={isLoading}
+            />
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isLoading}
             >
               Cancel
             </Button>

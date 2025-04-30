@@ -2,7 +2,7 @@ import { Contact, ProfileFields } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { PencilIcon, CheckIcon, PlusCircleIcon } from 'lucide-react';
+import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -83,6 +83,10 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
     fetchCommunityMemberships();
   }, [contact.id]);
 
+  const refreshTimeline = () => {
+    setTimelineRefreshTrigger(prev => prev + 1);
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -106,6 +110,7 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
       if (personError) throw personError;
 
       setIsEditing(false);
+      refreshTimeline(); // Refresh timeline after save
       toast.success("Changes saved", {
         description: "Profile has been updated successfully."
       });
@@ -187,6 +192,7 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
 
       console.log('Successfully added member:', data);
       
+      refreshTimeline(); // Refresh timeline after adding to community
       toast.success("Added to community", {
         description: "Successfully added to the community."
       });
@@ -281,33 +287,14 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
         throw new Error('Generated profile but failed to save changes');
       }
 
-      // Force a refresh of the timeline
-      setTimelineRefreshTrigger(prev => prev + 1);
-
+      refreshTimeline(); // Refresh timeline after generation
       toast.success('Profile generated successfully', {
         description: 'AI has analyzed the timeline and updated the profile.'
       });
     } catch (error) {
-      console.error('Error generating profile:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      
-      // Show a more detailed error message
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      const isConfigError = errorMessage.includes('API key');
-      
+      console.error('Error generating profile:', error);
       toast.error('Failed to generate profile', {
-        description: errorMessage,
-        duration: 5000, // Show for longer
-        action: isConfigError ? {
-          label: 'Contact Admin',
-          onClick: () => {
-            // You could add a mailto link or other contact method here
-            window.location.href = 'mailto:admin@example.com?subject=OpenAI%20API%20Configuration%20Issue';
-          }
-        } : undefined
+        description: error instanceof Error ? error.message : 'Please try again later'
       });
     } finally {
       setIsGenerating(false);
@@ -527,8 +514,21 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
 
           {/* Timeline Section */}
           <div className="space-y-4 pt-4 border-t">
-            <h3 className="text-lg font-semibold">Timeline</h3>
-            <Timeline personId={contact.id} refreshTrigger={timelineRefreshTrigger} />
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Timeline</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refreshTimeline}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+            <Timeline 
+              personId={contact.id} 
+              refreshTrigger={timelineRefreshTrigger} 
+            />
           </div>
         </div>
 
