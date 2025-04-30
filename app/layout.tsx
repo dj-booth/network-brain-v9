@@ -29,8 +29,8 @@ export default async function RootLayout({
             <strong>Session present:</strong> {session ? 'Yes' : 'No'}<br />
             <strong>Session object:</strong> <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(session, null, 2)}</pre>
           </div>
-          {session && <Sidebar />}
-          <main className={`flex-1 p-8 ${!session ? 'w-full' : ''}`}>
+          <Sidebar />
+          <main className={`flex-1 p-8`}>
             {children}
           </main>
         </div>
