@@ -364,6 +364,9 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
               
               if (!showField) return null;
 
+              // Special rendering for introsSought and reasonsToIntroduce
+              const isIntroField = key === 'introsSought' || key === 'reasonsToIntroduce';
+
               return (
                 <div key={key} className={`${isEditing ? 'bg-white rounded-lg p-4 shadow-sm' : ''}`}>
                   <h3 className="text-lg font-semibold mb-3">{label}</h3>
@@ -403,7 +406,22 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                       </div>
                     ) : null
                   ) : (
-                    type === 'array' ? (
+                    isIntroField && Array.isArray(value) ? (
+                      value.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {(value as any[]).map((item, idx) => (
+                            <li key={idx}>
+                              {item.title ? <span className="font-medium">{item.title}: </span> : null}
+                              {item.description}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground whitespace-pre-wrap">
+                          No information specified
+                        </p>
+                      )
+                    ) : type === 'array' ? (
                       <div className="flex flex-wrap gap-2">
                         {(value as string[])?.map((item, index) => (
                           <Badge key={index} variant="secondary">
