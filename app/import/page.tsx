@@ -198,14 +198,8 @@ export default function ImportPage() {
   };
 
   const handleImport = async () => {
-    if (!csvData.length) {
-      toast.error('No data to import');
-      return;
-    }
-
-    const mappedColumns = columnMappings.filter(m => m.status === 'matched');
-    if (!mappedColumns.length) {
-      toast.error('No columns mapped for import');
+    if (!csvData.length || !columnMappings.length) {
+      toast.error('Please upload a CSV file and map columns first');
       return;
     }
 
@@ -215,7 +209,7 @@ export default function ImportPage() {
       // Process each row
       const processedRows = csvData.map(row => {
         const processedRow: Record<string, string> = {};
-        mappedColumns.forEach((mapping, index) => {
+        columnMappings.forEach((mapping: ColumnMapping, index: number) => {
           const csvIndex = csvHeaders.indexOf(mapping.csvColumn);
           if (csvIndex !== -1) {
             processedRow[mapping.tableColumn] = row[csvIndex];
@@ -227,7 +221,7 @@ export default function ImportPage() {
       // Insert the rows into the people table
       const { data: insertedPeople, error: insertError } = await supabase
         .from('people')
-        .insert(processedRows)
+        .insert(processedRows.map(row => ({ ...row, deleted: false }))) // Set deleted to false for new profiles
         .select('id');
 
       if (insertError) throw insertError;

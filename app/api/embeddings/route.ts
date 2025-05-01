@@ -40,14 +40,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Person ID is required' }, { status: 400 });
     }
 
-    // Fetch person data
-    const { data: person, error: fetchError } = await supabase
+    // Get person data
+    const { data: person, error: personError } = await supabase
       .from('people')
       .select('*')
       .eq('id', personId)
+      .is('deleted', false) // Only generate embeddings for non-deleted profiles
       .single();
 
-    if (fetchError) throw fetchError;
+    if (personError) throw personError;
     if (!person) {
       return NextResponse.json({ error: 'Person not found' }, { status: 404 });
     }

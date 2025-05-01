@@ -65,7 +65,7 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId, communit
   const [loading, setLoading] = useState(true);
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<Set<string>>(new Set());
   const [selectedStatus, setSelectedStatus] = useState<ResponseStatus>('consider_for_invite');
-  const [searchScope, setSearchScope] = useState<'all' | 'community'>(communityId ? 'community' : 'all');
+  const [searchScope, setSearchScope] = useState<'all' | 'community'>('all');
   const [communityName, setCommunityName] = useState<string>('');
 
   useEffect(() => {
@@ -98,58 +98,31 @@ export function PeopleSelector({ open, onOpenChange, onSelect, eventId, communit
       console.log('PeopleSelector loadPeople using eventId:', eventId);
       setLoading(true);
       try {
-        console.log('Loading people...');
-        
-        // Get existing attendees to exclude
-        const { data: existingAttendees, error: attendeesError } = await supabase
-          .from('event_attendees')
-          .select('person_id')
-          .eq('event_id', eventId);
-
-        if (attendeesError) throw attendeesError;
-
-        const existingIds = existingAttendees?.map(a => a.person_id) || [];
-
-        // Base query for people
         let query = supabase
           .from('people')
-          .select('id, name, image_url, title, company')
-          .order('name');
+          .select('*, community_members(community_id)')
+          .is('deleted', false);
 
-        // Exclude existing attendees if any
-        if (existingIds.length > 0) {
-          query = query.not('id', 'in', `(${existingIds.join(',')})`);
-        }
-
-        // If searching within community, join with community_members
-        if (searchScope === 'community' && communityId) {
-          const { data: communityMembers, error: membersError } = await supabase
-            .from('community_members')
+        if (eventId) {
+          const { data: existingAttendees } = await supabase
+            .from('event_attendees')
             .select('person_id')
-            .eq('community_id', communityId)
-            .eq('membership_status', 'approved');
-
-          if (membersError) throw membersError;
-
-          const memberIds = communityMembers.map(m => m.person_id);
-          if (memberIds.length > 0) {
-            query = query.in('id', memberIds);
-          } else {
-            // If no members in community, return empty array
-            setPeople([]);
-            setLoading(false);
-            return;
+            .eq('event_id', eventId);
+          
+          const existingAttendeeIds = existingAttendees?.map(row => row.person_id) || [];
+          if (existingAttendeeIds.length > 0) {
+            query = query.not('id', 'in', existingAttendeeIds);
           }
         }
 
-        const { data, error } = await query;
-
-        if (error) {
-          console.error('Supabase error loading people:', error);
-          throw error;
+        if (searchScope === 'community' && communityId) {
+          query = query.eq('community_members.community_id', communityId);
         }
-        
-        console.log('Loaded people:', data);
+
+        const { data, error } = await query.order('name');
+
+        if (error) throw error;
+        console.log('People query results:', data);
         setPeople(data || []);
       } catch (error) {
         console.error('Error loading people:', error);

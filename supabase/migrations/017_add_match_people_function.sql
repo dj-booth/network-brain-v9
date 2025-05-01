@@ -32,6 +32,8 @@ BEGIN
     p.id != source_person_id
     -- Only include people with embeddings
     AND p.embedding IS NOT NULL
+    -- Exclude deleted people
+    AND (p.deleted IS NULL OR p.deleted = false)
     -- Exclude people who already have an introduction with the source person
     AND NOT EXISTS (
       SELECT 1 FROM introductions i

@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from '@/components/ui/input';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 interface SuggestedIntroduction {
   id: string;
@@ -64,32 +65,37 @@ export default function IntroductionsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [feedbackNotes, setFeedbackNotes] = useState<{ [key: string]: string }>({});
   const [savedNotes, setSavedNotes] = useState<{ [key: string]: string }>({});
+  const [loading, setLoading] = useState(true);
+  const personId = searchParams.get('personId');
 
-  // Load person from URL parameter
   useEffect(() => {
-    const personId = searchParams.get('personId');
-    if (personId && !selectedPerson) {
-      const loadPersonFromId = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('people')
-            .select('*')
-            .eq('id', personId)
-            .single();
+    async function loadPeople() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('people')
+          .select('*')
+          .is('deleted', false)
+          .order('name');
 
-          if (error) throw error;
-          if (data) {
-            setSelectedPerson(data);
-            setSearchQuery(data.name);
+        if (error) throw error;
+        setPeople(data || []);
+
+        if (personId) {
+          const selectedPerson = data?.find(p => p.id === personId);
+          if (selectedPerson) {
+            setSelectedPerson(selectedPerson);
           }
-        } catch (err) {
-          console.error('Error loading person from ID:', err);
         }
-      };
-
-      loadPersonFromId();
+      } catch (error) {
+        console.error('Error loading people:', error);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [searchParams, selectedPerson]);
+
+    loadPeople();
+  }, [personId]);
 
   // Search people in Supabase
   useEffect(() => {
@@ -427,7 +433,17 @@ export default function IntroductionsPage() {
                   onClick={() => handlePersonSelect(person)}
                 >
                   <div className="flex flex-col gap-1">
-                    <div className="font-medium">{person.name}</div>
+                    <div className="font-medium">
+                      <Link 
+                        href={`/?selected=${person.id}`}
+                        className="hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent the button's onClick from firing
+                        }}
+                      >
+                        {person.name}
+                      </Link>
+                    </div>
                     {(person.title || person.company) && (
                       <div className="text-sm text-gray-500 flex items-center gap-4">
                         {person.title && (
@@ -466,7 +482,12 @@ export default function IntroductionsPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <h2 className="text-2xl font-bold">{selectedPerson.name}</h2>
+                    <Link 
+                      href={`/?selected=${selectedPerson.id}`}
+                      className="text-2xl font-bold hover:underline"
+                    >
+                      {selectedPerson.name}
+                    </Link>
                     {selectedPerson.title && (
                       <p className="text-muted-foreground">{selectedPerson.title}</p>
                     )}
@@ -541,7 +562,12 @@ export default function IntroductionsPage() {
                         <div className="flex-1">
                           <div className="flex justify-between items-start">
                             <div>
-                              <h4 className="font-semibold">{intro.person.name}</h4>
+                              <Link 
+                                href={`/?selected=${intro.person.id}`}
+                                className="font-semibold hover:underline"
+                              >
+                                {intro.person.name}
+                              </Link>
                               <p className="text-sm text-muted-foreground">
                                 {intro.person.title} at {intro.person.company}
                               </p>

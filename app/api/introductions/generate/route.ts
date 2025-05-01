@@ -45,6 +45,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Person ID is required' }, { status: 400 });
     }
 
+    // Get person data
+    const { data: person, error: personError } = await supabase
+      .from('people')
+      .select('*')
+      .eq('id', personId)
+      .is('deleted', false) // Only generate introductions for non-deleted profiles
+      .single();
+
+    if (personError) throw personError;
+    if (!person) {
+      return NextResponse.json({ error: 'Person not found' }, { status: 404 });
+    }
+
     // Fetch the source person's embedding
     const { data: sourcePerson, error: sourceError } = await supabase
       .from('people')

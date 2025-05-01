@@ -8,6 +8,7 @@ import { supabase, type Community } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useSearchParams } from 'next/navigation';
 import { CommunityMembers } from '../../app/components/CommunityMembers';
+import { CommunityEvents } from '@/app/components/CommunityEvents';
 
 export default function CommunitiesPage() {
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -168,6 +169,9 @@ export default function CommunitiesPage() {
             </div>
 
             <div className="space-y-6">
+              <div>
+                <CommunityEvents communityId={selectedCommunity.id} />
+              </div>
               <div>
                 <CommunityMembers communityId={selectedCommunity.id} />
               </div>

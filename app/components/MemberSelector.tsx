@@ -51,8 +51,8 @@ interface MemberSelectorProps {
 // Renamed component
 export function MemberSelector({ open, onOpenChange, onSelect, communityId }: MemberSelectorProps) {
   console.log('MemberSelector received communityId:', communityId);
-  const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
+  const [people, setPeople] = useState<Person[]>([]);
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<Set<string>>(new Set());
   // Default to 'prospect'
   const [selectedStatus, setSelectedStatus] = useState<CommunityMembershipStatus>('prospect'); 
@@ -74,23 +74,15 @@ export function MemberSelector({ open, onOpenChange, onSelect, communityId }: Me
 
         const existingIds = existingMembers?.map(m => m.person_id) || [];
 
-        // Get all people except those already members
-        const query = supabase
+        // Get people who aren't already members
+        const { data, error } = await supabase
           .from('people')
-          .select('id, name, image_url, title, company')
+          .select('*')
+          .is('deleted', false) // Filter out deleted profiles
+          .not('id', 'in', existingIds)
           .order('name');
 
-        // Only add the not-in condition if there are existing members
-        if (existingIds.length > 0) {
-          query.not('id', 'in', `(${existingIds.join(',')})`);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.error('Supabase error loading people:', error);
-          throw error;
-        }
+        if (error) throw error;
         
         console.log('Loaded potential members:', data);
         setPeople(data || []);

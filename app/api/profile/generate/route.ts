@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       .from('people')
       .select('*')
       .eq('id', personId)
+      .is('deleted', false)
       .single();
 
     if (personError) {

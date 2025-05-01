@@ -5,6 +5,7 @@ import { Search, Building2, Briefcase } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Person } from '@/lib/supabase';
 import { AudioRecorder } from '@/app/components/AudioRecorder';
+import { useSearchParams } from 'next/navigation';
 
 export default function AddContextPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,6 +22,38 @@ export default function AddContextPage() {
   const [newUserTitle, setNewUserTitle] = useState('');
   const [newUserCompany, setNewUserCompany] = useState('');
   const [addUserLoading, setAddUserLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const personId = searchParams.get('personId');
+
+  useEffect(() => {
+    async function loadPeople() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('people')
+          .select('*')
+          .is('deleted', false)
+          .order('name');
+
+        if (error) throw error;
+        setPeople(data || []);
+
+        if (personId) {
+          const selectedPerson = data?.find(p => p.id === personId);
+          if (selectedPerson) {
+            setSelectedPerson(selectedPerson);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading people:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPeople();
+  }, [personId]);
 
   // Search people in Supabase
   useEffect(() => {

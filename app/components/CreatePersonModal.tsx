@@ -9,6 +9,21 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 
+interface Person {
+  id: string;
+  name: string;
+  email?: string;
+  title?: string;
+  company?: string;
+  summary?: string;
+  detailed_summary?: string;
+  image_url?: string;
+  last_contact?: string;
+  intros_sought?: string;
+  reasons_to_introduce?: string;
+  deleted?: boolean;
+}
+
 interface CreatePersonModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -18,7 +33,7 @@ interface CreatePersonModalProps {
 export function CreatePersonModal({ open, onOpenChange, onPersonCreated }: CreatePersonModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Partial<Person>>({
     name: '',
     email: '',
     title: '',
@@ -26,9 +41,9 @@ export function CreatePersonModal({ open, onOpenChange, onPersonCreated }: Creat
     summary: '',
     detailed_summary: '',
     image_url: '/placeholder-avatar.svg',
+    last_contact: new Date().toISOString().split('T')[0],
     intros_sought: '',
-    reasons_to_introduce: '',
-    last_contact: new Date().toISOString().split('T')[0], // Today's date as default
+    reasons_to_introduce: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,18 +51,42 @@ export function CreatePersonModal({ open, onOpenChange, onPersonCreated }: Creat
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      // Check if email already exists
+      if (formData.email) {
+        const { data: existingPerson, error: checkError } = await supabase
+          .from('people')
+          .select('id')
+          .eq('email', formData.email)
+          .is('deleted', false) // Only check non-deleted profiles
+          .single();
+
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+          throw checkError;
+        }
+
+        if (existingPerson) {
+          toast.error("Email already exists", {
+            description: "A profile with this email address already exists."
+          });
+          return;
+        }
+      }
+
+      // Create the person
+      const { data, error } = await supabase
         .from('people')
-        .insert([formData]);
+        .insert([formData])
+        .select()
+        .single();
 
       if (error) throw error;
 
-      toast({
-        title: "Success",
-        description: "Person created successfully",
+      toast.success("Profile created", {
+        description: "New profile has been created successfully."
       });
 
-      // Reset form
+      onPersonCreated?.();
+      onOpenChange(false);
       setFormData({
         name: '',
         email: '',
@@ -56,23 +95,14 @@ export function CreatePersonModal({ open, onOpenChange, onPersonCreated }: Creat
         summary: '',
         detailed_summary: '',
         image_url: '/placeholder-avatar.svg',
-        intros_sought: '',
-        reasons_to_introduce: '',
         last_contact: new Date().toISOString().split('T')[0],
+        intros_sought: '',
+        reasons_to_introduce: ''
       });
-
-      onOpenChange(false);
-      onPersonCreated?.();
-
-    } catch (error: unknown) {
-      let message = 'An error occurred.';
-      if (error && typeof error === 'object' && 'message' in error) {
-        message = (error as { message?: string }).message || message;
-      }
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
+    } catch (error) {
+      console.error('Error creating person:', error);
+      toast.error("Error creating profile", {
+        description: "Please try again."
       });
     } finally {
       setLoading(false);

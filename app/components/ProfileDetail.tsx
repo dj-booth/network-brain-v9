@@ -2,7 +2,7 @@ import { Contact, ProfileFields } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw } from 'lucide-react';
+import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,18 @@ import { toast } from 'sonner';
 import { AddContextDialog } from './AddContextDialog';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import styles from './ProfileDetail.module.css';
+import { EventSelector, ResponseStatus } from './EventSelector';
 
 interface ProfileDetailProps {
   contact: Contact;
@@ -43,8 +55,21 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showCommunitySelector, setShowCommunitySelector] = useState(false);
   const [showAddContext, setShowAddContext] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [timelineRefreshTrigger, setTimelineRefreshTrigger] = useState(0);
   const [communityMemberships, setCommunityMemberships] = useState<CommunityMembershipInfo[]>([]);
+  const [showEventSelector, setShowEventSelector] = useState(false);
+
+  // Update editedContact when contact changes
+  useEffect(() => {
+    setEditedContact({
+      ...contact,
+      skills: contact.skills || [],
+      interests: contact.interests || [],
+    });
+    setIsEditing(false); // Reset editing state when switching profiles
+    setTimelineRefreshTrigger(prev => prev + 1); // Refresh timeline for new contact
+  }, [contact]);
 
   // Fetch community memberships when contact changes
   useEffect(() => {
@@ -204,20 +229,83 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
     }
   };
 
-  const handleAddToEvent = async () => {
+  const handleAddToEvent = async (eventId: string, status: ResponseStatus) => {
+    if (!contact.id || !eventId) {
+      toast.error("Invalid request", {
+        description: "Missing required information to add to event."
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      console.log('Starting event attendance check with:', {
+        eventId,
+        personId: contact.id,
+        status
+      });
+
+      // First verify the event exists
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('id, title')
+        .eq('id', eventId)
+        .single();
+
+      if (eventError) {
+        console.error('Error verifying event:', {
+          error: eventError,
+          eventId
+        });
+        throw new Error('Event not found or no longer exists');
+      }
+
+      console.log('Event verified:', eventData);
+
+      // Direct insert approach - if it fails due to duplicate, we'll handle it
+      const { data: insertData, error: insertError } = await supabase
         .from('event_attendees')
-        .insert([{ person_id: contact.id }]);
+        .upsert(
+          {
+            event_id: eventId,
+            person_id: contact.id,
+            response_status: status
+          },
+          {
+            onConflict: 'event_id,person_id',
+            ignoreDuplicates: false
+          }
+        );
+
+      if (insertError) {
+        console.error('Error in event_attendees operation:', {
+          error: insertError,
+          code: insertError.code,
+          details: insertError.details,
+          hint: insertError.hint
+        });
+
+        // Handle specific error cases
+        if (insertError.code === '23505') { // Unique violation
+          throw new Error('Already added to this event');
+        } else if (insertError.code === '23503') { // Foreign key violation
+          throw new Error('Event or person not found');
+        } else if (insertError.code === '23514') { // Check violation
+          throw new Error('Invalid response status');
+        } else {
+          throw new Error(`Database error: ${insertError.message}`);
+        }
+      }
+
+      console.log('Successfully handled event attendance:', insertData);
       
-      if (error) throw error;
+      refreshTimeline();
       toast.success("Added to event", {
         description: "Successfully added to the event."
       });
     } catch (error) {
-      console.error('Error adding to event:', error);
+      console.error('Final error in handleAddToEvent:', error);
       toast.error("Error adding to event", {
-        description: "Please try again."
+        description: error instanceof Error ? error.message : "An unexpected error occurred"
       });
     }
   };
@@ -301,6 +389,30 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
     }
   };
 
+  const handleDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('people')
+        .update({ deleted: true })
+        .eq('id', contact.id);
+
+      if (error) throw error;
+
+      toast.success("Profile deleted", {
+        description: "The profile has been successfully deleted."
+      });
+      
+      // Redirect to home page
+      router.push('/');
+      router.refresh();
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      toast.error("Error deleting profile", {
+        description: "Please try again."
+      });
+    }
+  };
+
   // Define the fields to display
   const profileFields: Array<{key: keyof ProfileFields; label: string; type: 'text' | 'textarea' | 'array'; showByDefault?: boolean}> = [
     { key: 'email', label: 'Email', type: 'text' },
@@ -326,242 +438,409 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   ];
 
   return (
-    <div className="h-full overflow-y-auto">
-      {/* Header */}
-      <div className="sticky top-0 bg-background border-b p-4 flex justify-between items-center">
-        <h2 className="text-2xl font-semibold">{contact.name}</h2>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-          >
-            {isGenerating ? 'Generating...' : 'Generate'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-            disabled={isSaving}
-          >
-            {isEditing ? (
-              <CheckIcon className="h-4 w-4" />
-            ) : (
-              <PencilIcon className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="p-6 flex justify-between items-start space-x-6">
-        {/* Left Column: Profile Info & Details */}
-        <div className="flex-1 space-y-8 min-w-0">
-          {/* Profile Header */}
-          <div className={`flex items-start space-x-6 p-4 rounded-lg ${isEditing ? 'bg-blue-50/50 border border-blue-200' : ''}`}>
-            <div className="relative h-24 w-24 flex-shrink-0">
-              <Image
-                src={contact.imageUrl}
-                alt={contact.name}
-                width={96}
-                height={96}
-                className="rounded-full object-cover"
-              />
-            </div>
-            {/* Name, Title, Company, Tags */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold truncate">{contact.name}</h1>
-              {(!isEditing && contact.title) && (
-                <p className="text-muted-foreground mt-1">{contact.title}</p>
-              )}
-              {(!isEditing && contact.company) && (
-                <p className="text-muted-foreground">{contact.company}</p>
-              )}
-              {(!isEditing && contact.email) && (
-                <p className="text-muted-foreground mt-1">{contact.email}</p>
-              )}
-              {(!isEditing && contact.linkedinUrl) && (
-                <a 
-                  href={contact.linkedinUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="text-blue-600 hover:text-blue-800 mt-1 block"
-                >
-                  LinkedIn Profile
-                </a>
-              )}
-              {/* Community Membership Tags */}
-              {communityMemberships.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {communityMemberships.map((community) => (
-                    <Badge 
-                      key={community.id} 
-                      variant="outline" 
-                      className="border bg-blue-100 text-blue-800"
-                    >
-                      {community.name}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Profile Fields */}
-          <div className={`rounded-lg p-6 space-y-6 relative border transition-colors duration-200 ${
-            isEditing 
-              ? 'bg-blue-50/50 border-blue-200 shadow-sm' 
-              : 'bg-gray-100/70 border-gray-200/80'
-          }`}>
-            {isEditing && (
-              <div className="absolute top-0 right-0 m-4 px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                Editing Mode
-              </div>
-            )}
-            {profileFields.map(({ key, label, type, showByDefault }) => {
-              const value = editedContact[key];
-              const showField = isEditing || (showByDefault && hasContent(value));
-              
-              if (!showField) return null;
-
-              // Special rendering for introsSought and reasonsToIntroduce
-              const isIntroField = key === 'introsSought' || key === 'reasonsToIntroduce';
-
-              return (
-                <div key={key} className={`${isEditing ? 'bg-white rounded-lg p-4 shadow-sm' : ''}`}>
-                  <h3 className="text-lg font-semibold mb-3">{label}</h3>
-                  {isEditing ? (
-                    type === 'textarea' ? (
-                      <Textarea
-                        value={value as string || ''}
-                        onChange={(e) => setEditedContact({
-                          ...editedContact,
-                          [key]: e.target.value
-                        })}
-                        className="min-h-[100px]"
-                        placeholder={`Enter ${label.toLowerCase()}...`}
-                      />
-                    ) : type === 'text' ? (
-                      <Input
-                        value={value as string || ''}
-                        onChange={(e) => setEditedContact({
-                          ...editedContact,
-                          [key]: e.target.value
-                        })}
-                        placeholder={`Enter ${label.toLowerCase()}...`}
-                      />
-                    ) : type === 'array' ? (
-                      <div className="space-y-2">
+    <div className={styles.profileContainer}>
+      {/* Main Content Area */}
+      <div className={styles.mainContent}>
+        {/* Scrollable Content */}
+        <div className={styles.scrollableContent}>
+          {/* Profile Details Section */}
+          <div className={styles.profileDetailsSection}>
+            {/* Sticky Profile Summary */}
+            <div className={styles.stickyProfileSummary}>
+              <div className={styles.profileHeader}>
+                <div className={styles.profileInfo}>
+                  <div className={styles.profileImage}>
+                    <Image
+                      src={contact.imageUrl}
+                      alt={contact.name}
+                      width={96}
+                      height={96}
+                      className="object-cover"
+                    />
+                  </div>
+                  {/* Name, Title, Company, Tags */}
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-2xl font-bold truncate">
+                      {isEditing ? (
                         <Input
-                          value={(value as string[])?.join(', ') || ''}
+                          value={editedContact.name || ''}
                           onChange={(e) => setEditedContact({
                             ...editedContact,
-                            [key]: e.target.value.split(',').map(item => item.trim()).filter(Boolean)
+                            name: e.target.value
                           })}
-                          placeholder={`Enter ${label.toLowerCase()} separated by commas...`}
+                          placeholder="Name"
+                          className="text-2xl font-bold"
                         />
-                        <p className="text-sm text-muted-foreground">
-                          Separate multiple {label.toLowerCase()} with commas
-                        </p>
-                      </div>
-                    ) : null
-                  ) : (
-                    isIntroField && Array.isArray(value) ? (
-                      value.length > 0 ? (
-                        <ul className="list-disc pl-5 space-y-1">
-                          {(value as any[]).map((item, idx) => (
-                            <li key={idx}>
-                              {item.title ? <span className="font-medium">{item.title}: </span> : null}
-                              {item.description}
-                            </li>
-                          ))}
-                        </ul>
                       ) : (
-                        <p className="text-muted-foreground whitespace-pre-wrap">
-                          No information specified
-                        </p>
-                      )
-                    ) : type === 'array' ? (
-                      <div className="flex flex-wrap gap-2">
-                        {(value as string[])?.map((item, index) => (
-                          <Badge key={index} variant="secondary">
-                            {item}
+                        contact.name
+                      )}
+                    </h1>
+                    {isEditing ? (
+                      <div className="space-y-2 mt-2">
+                        <Input
+                          value={editedContact.title || ''}
+                          onChange={(e) => setEditedContact({
+                            ...editedContact,
+                            title: e.target.value
+                          })}
+                          placeholder="Title"
+                          className="text-muted-foreground"
+                        />
+                        <Input
+                          value={editedContact.company || ''}
+                          onChange={(e) => setEditedContact({
+                            ...editedContact,
+                            company: e.target.value
+                          })}
+                          placeholder="Company"
+                          className="text-muted-foreground"
+                        />
+                        <Input
+                          value={editedContact.email || ''}
+                          onChange={(e) => setEditedContact({
+                            ...editedContact,
+                            email: e.target.value
+                          })}
+                          placeholder="Email"
+                          className="text-muted-foreground"
+                        />
+                        <Input
+                          value={editedContact.linkedinUrl || ''}
+                          onChange={(e) => setEditedContact({
+                            ...editedContact,
+                            linkedinUrl: e.target.value
+                          })}
+                          placeholder="LinkedIn URL"
+                          className="text-blue-600"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        {contact.title && (
+                          <p className="text-muted-foreground mt-1">{contact.title}</p>
+                        )}
+                        {contact.company && (
+                          <p className="text-muted-foreground">{contact.company}</p>
+                        )}
+                        {contact.email && (
+                          <p className="text-muted-foreground mt-1">{contact.email}</p>
+                        )}
+                        {contact.linkedinUrl && (
+                          <a 
+                            href={contact.linkedinUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 hover:text-blue-800 mt-1 block"
+                          >
+                            LinkedIn Profile
+                          </a>
+                        )}
+                      </>
+                    )}
+                    {/* Community Membership Tags */}
+                    {communityMemberships.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {communityMemberships.map((community) => (
+                          <Badge 
+                            key={community.id} 
+                            variant="outline" 
+                            className="border bg-blue-100 text-blue-800"
+                          >
+                            {community.name}
                           </Badge>
                         ))}
                       </div>
+                    )}
+                  </div>
+                </div>
+                {/* Edit button moved to the right */}
+                <div className="flex-shrink-0">
+                  {isEditing ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleSave} 
+                      disabled={isSaving}
+                    >
+                      {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckIcon className="h-4 w-4 mr-1" />}
+                      Save
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <PencilIcon className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Fields */}
+            <div className={styles.profileFields}>
+              {/* About Section */}
+              <div className={styles.fieldGroup}>
+                <h2 className={styles.sectionTitle}>About</h2>
+                <div className={styles.fieldContent}>
+                  {isEditing ? (
+                    <Textarea
+                      value={editedContact.detailedSummary || ''}
+                      onChange={(e) => setEditedContact({
+                        ...editedContact,
+                        detailedSummary: e.target.value
+                      })}
+                      placeholder="Tell us about this person..."
+                      className="min-h-[150px] w-full p-3"
+                    />
+                  ) : (
+                    editedContact.detailedSummary || 'No information provided'
+                  )}
+                </div>
+              </div>
+
+              {/* Looking to Connect With Section */}
+              <div className={styles.fieldGroup}>
+                <h2 className={styles.sectionTitle}>Looking to Connect With</h2>
+                <div className={styles.fieldContent}>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      {!editedContact.introsSought?.length && (
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Add details about who this person would like to connect with.
+                        </div>
+                      )}
+                      {(editedContact.introsSought || []).map((item: any, idx: number) => (
+                        <div key={idx} className="flex gap-4 items-start">
+                          <div className="flex-1 space-y-2">
+                            <Input
+                              value={item.title || ''}
+                              onChange={(e) => {
+                                const newIntros = [...(editedContact.introsSought || [])];
+                                newIntros[idx] = { ...newIntros[idx], title: e.target.value };
+                                setEditedContact({
+                                  ...editedContact,
+                                  introsSought: newIntros
+                                });
+                              }}
+                              placeholder="Connection type (e.g., 'Technical founders')"
+                              className="font-medium"
+                            />
+                            <Textarea
+                              value={item.description || ''}
+                              onChange={(e) => {
+                                const newIntros = [...(editedContact.introsSought || [])];
+                                newIntros[idx] = { ...newIntros[idx], description: e.target.value };
+                                setEditedContact({
+                                  ...editedContact,
+                                  introsSought: newIntros
+                                });
+                              }}
+                              placeholder="Describe the type of connections they're looking for..."
+                              className="min-h-[100px]"
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newIntros = [...(editedContact.introsSought || [])];
+                              newIntros.splice(idx, 1);
+                              setEditedContact({
+                                ...editedContact,
+                                introsSought: newIntros
+                              });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditedContact({
+                            ...editedContact,
+                            introsSought: [
+                              ...(editedContact.introsSought || []),
+                              { title: '', description: '' }
+                            ]
+                          });
+                        }}
+                      >
+                        <PlusCircleIcon className="h-4 w-4 mr-2" />
+                        Add Connection Type
+                      </Button>
+                    </div>
+                  ) : (
+                    Array.isArray(editedContact.introsSought) && editedContact.introsSought.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-2">
+                        {editedContact.introsSought.map((item: any, idx: number) => (
+                          <li key={idx}>
+                            {item.title && <span className="font-medium">{item.title}: </span>}
+                            {item.description}
+                          </li>
+                        ))}
+                      </ul>
                     ) : (
-                      <p className="text-muted-foreground whitespace-pre-wrap">
-                        {value as string}
-                      </p>
+                      'No specific connection preferences specified'
                     )
                   )}
                 </div>
-              );
-            })}
+              </div>
 
-            {/* Generate Button */}
-            <div className="absolute bottom-4 right-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGenerate}
-                disabled={isGenerating}
-              >
-                {isGenerating ? "Generating..." : "Regenerate"}
-              </Button>
-            </div>
-          </div>
+              {/* Ways to Help Section */}
+              <div className={styles.fieldGroup}>
+                <h2 className={styles.sectionTitle}>Ways to Help</h2>
+                <div className={styles.fieldContent}>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      {!editedContact.reasonsToIntroduce?.length && (
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Add ways others can help or reasons to introduce this person.
+                        </div>
+                      )}
+                      {(editedContact.reasonsToIntroduce || []).map((item: any, idx: number) => (
+                        <div key={idx} className="flex gap-4 items-start">
+                          <div className="flex-1 space-y-2">
+                            <Input
+                              value={item.title || ''}
+                              onChange={(e) => {
+                                const newReasons = [...(editedContact.reasonsToIntroduce || [])];
+                                newReasons[idx] = { ...newReasons[idx], title: e.target.value };
+                                setEditedContact({
+                                  ...editedContact,
+                                  reasonsToIntroduce: newReasons
+                                });
+                              }}
+                              placeholder="Reason title (e.g., 'Expertise')"
+                              className="font-medium"
+                            />
+                            <Textarea
+                              value={item.description || ''}
+                              onChange={(e) => {
+                                const newReasons = [...(editedContact.reasonsToIntroduce || [])];
+                                newReasons[idx] = { ...newReasons[idx], description: e.target.value };
+                                setEditedContact({
+                                  ...editedContact,
+                                  reasonsToIntroduce: newReasons
+                                });
+                              }}
+                              placeholder="Describe how they can help..."
+                              className="min-h-[100px]"
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newReasons = [...(editedContact.reasonsToIntroduce || [])];
+                              newReasons.splice(idx, 1);
+                              setEditedContact({
+                                ...editedContact,
+                                reasonsToIntroduce: newReasons
+                              });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditedContact({
+                            ...editedContact,
+                            reasonsToIntroduce: [
+                              ...(editedContact.reasonsToIntroduce || []),
+                              { title: '', description: '' }
+                            ]
+                          });
+                        }}
+                      >
+                        <PlusCircleIcon className="h-4 w-4 mr-2" />
+                        Add Way to Help
+                      </Button>
+                    </div>
+                  ) : (
+                    Array.isArray(editedContact.reasonsToIntroduce) && editedContact.reasonsToIntroduce.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-2">
+                        {editedContact.reasonsToIntroduce.map((item: any, idx: number) => (
+                          <li key={idx}>
+                            {item.title && <span className="font-medium">{item.title}: </span>}
+                            {item.description}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      'No information provided'
+                    )
+                  )}
+                </div>
+              </div>
 
-          {/* Timeline Section */}
-          <div className="space-y-4 pt-4 border-t">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Timeline</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={refreshTimeline}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
+              {/* Timeline Section */}
+              <div className={styles.timeline}>
+                <h2 className={styles.sectionTitle}>Timeline</h2>
+                <Timeline personId={contact.id} refreshTrigger={timelineRefreshTrigger} />
+              </div>
             </div>
-            <Timeline 
-              personId={contact.id} 
-              refreshTrigger={timelineRefreshTrigger} 
-            />
           </div>
         </div>
 
-        {/* Right Column: Action Buttons */}
-        <div className="flex flex-col gap-3 w-40">
-          <Button
-            variant="outline"
-            onClick={() => setShowCommunitySelector(true)}
-            size="sm"
-          >
-            Add to Community
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/introductions?personId=${contact.id}`)}
-            size="sm"
-          >
-            Suggest Intros
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleAddToEvent()}
-            size="sm"
-          >
-            Add to Event
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowAddContext(true)}
-            size="sm"
-          >
-            Add Context
-          </Button>
+        {/* Sticky Sidebar */}
+        <div className={styles.stickySidebar}>
+          <div className="flex flex-col h-full">
+            <div className="space-y-3">
+              <Button 
+                className={styles.actionButton}
+                variant="default"
+                onClick={() => setShowCommunitySelector(true)}
+              >
+                Add to Community
+              </Button>
+              
+              <Button 
+                className={styles.actionButton}
+                variant="default"
+                onClick={() => router.push(`/introductions?personId=${contact.id}`)}
+              >
+                Suggest Intros
+              </Button>
+              
+              <Button 
+                className={styles.actionButton}
+                variant="outline"
+                onClick={() => setShowEventSelector(true)}
+              >
+                Add to Event
+              </Button>
+
+              <Button 
+                className={styles.actionButton}
+                variant="outline"
+                onClick={() => setShowAddContext(true)}
+              >
+                Add Context
+              </Button>
+            </div>
+
+            {/* Delete button at bottom */}
+            <div className="mt-auto pt-6 border-t">
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+                className={styles.actionButton}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Profile
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -578,6 +857,29 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
         onOpenChange={setShowAddContext}
         onNoteAdded={() => setTimelineRefreshTrigger(prev => prev + 1)}
       />
+
+      <EventSelector
+        open={showEventSelector}
+        onOpenChange={setShowEventSelector}
+        onSelect={handleAddToEvent}
+      />
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will hide the profile from view but preserve the data. You can restore it later if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete Profile
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 

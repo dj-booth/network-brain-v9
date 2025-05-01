@@ -41,6 +41,7 @@ export default function HomePage() {
         const { data: peopleData, error } = await supabase
           .from('people')
           .select('*')
+          .is('deleted', false)
           .order('name');
 
         if (error) throw error;
