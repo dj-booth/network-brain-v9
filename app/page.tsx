@@ -23,6 +23,7 @@ interface Person {
   last_contact: string | null;
   intros_sought: string | null;
   reasons_to_introduce: string | null;
+  linkedin_url: string | null;
 }
 
 export default function HomePage() {
@@ -72,6 +73,7 @@ export default function HomePage() {
     detailedSummary: selectedPerson.detailed_summary || '',
     imageUrl: selectedPerson.image_url,
     lastContact: selectedPerson.last_contact || undefined,
+    linkedinUrl: selectedPerson.linkedin_url || '',
     introsSought: selectedPerson.intros_sought
       ? [{ title: 'Connection', description: selectedPerson.intros_sought }]
       : [],

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
         .from('notes')
         .select('*')
         .eq('person_id', personId)
+        .eq('type', 'text')
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1);
 

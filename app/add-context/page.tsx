@@ -21,6 +21,8 @@ export default function AddContextPage() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserTitle, setNewUserTitle] = useState('');
   const [newUserCompany, setNewUserCompany] = useState('');
+  const [newUserLinkedinUrl, setNewUserLinkedinUrl] = useState('');
+  const [shouldEnrichWithAI, setShouldEnrichWithAI] = useState(true);
   const [addUserLoading, setAddUserLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
@@ -165,19 +167,54 @@ export default function AddContextPage() {
     setAddUserLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase
+      // First, create the person record with basic info
+      const { data: person, error: insertError } = await supabase
         .from('people')
-        .insert({ name: newUserName.trim(), title: newUserTitle.trim() || null, company: newUserCompany.trim() || null })
+        .insert({ 
+          name: newUserName.trim(), 
+          title: newUserTitle.trim() || null, 
+          company: newUserCompany.trim() || null,
+          linkedin_url: newUserLinkedinUrl.trim() || null,
+        })
         .select()
         .single();
-      if (error) throw error;
-      setSelectedPerson(data);
-      setSearchQuery(data.name);
+
+      if (insertError) throw insertError;
+
+      // If OpenAI enrichment is enabled, call the profile generation API
+      if (shouldEnrichWithAI && person) {
+        try {
+          const enrichResponse = await fetch('/api/profile/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              personId: person.id,
+              systemPromptKey: 'create_enrich_person' // Using the correct key
+            })
+          });
+
+          if (!enrichResponse.ok) {
+            console.error('Failed to enrich profile:', await enrichResponse.text());
+          }
+        } catch (enrichError) {
+          console.error('Error enriching profile:', enrichError);
+          // Don't throw here - we still want to proceed with the basic profile
+        }
+      }
+
+      // Update UI state
+      setSelectedPerson(person);
+      setSearchQuery(person.name);
       setShowAddUserForm(false);
       setIsDropdownOpen(false);
+      
+      // Clear form
       setNewUserName('');
       setNewUserTitle('');
       setNewUserCompany('');
+      setNewUserLinkedinUrl('');
+      setShouldEnrichWithAI(true);
+      
     } catch (err) {
       setError('Failed to add user');
       console.error('Error adding user:', err);
@@ -254,6 +291,22 @@ export default function AddContextPage() {
                         value={newUserCompany}
                         onChange={e => setNewUserCompany(e.target.value)}
                       />
+                      <input
+                        type="url"
+                        className="border rounded px-2 py-1"
+                        placeholder="LinkedIn URL (optional)"
+                        value={newUserLinkedinUrl}
+                        onChange={e => setNewUserLinkedinUrl(e.target.value)}
+                      />
+                      <label className="flex items-center gap-2 text-sm text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={shouldEnrichWithAI}
+                          onChange={e => setShouldEnrichWithAI(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                        Enrich profile with OpenAI
+                      </label>
                       <div className="flex gap-2 mt-1">
                         <button
                           type="submit"

@@ -2,7 +2,7 @@ import { Contact, ProfileFields } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw, Trash2 } from 'lucide-react';
+import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw, Trash2, Search } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -53,6 +53,7 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
   const [showCommunitySelector, setShowCommunitySelector] = useState(false);
   const [showAddContext, setShowAddContext] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -311,73 +312,39 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   };
 
   const handleGenerate = async () => {
-    setIsGenerating(true);
     try {
-      // Check if we have a valid contact ID
-      if (!contact.id) {
-        throw new Error('Invalid contact ID');
-      }
+      setIsGenerating(true);
+      // Get all timeline data for this person
+      const { data: timelineData, error: timelineError } = await supabase
+        .from('timeline_items')
+        .select('*')
+        .eq('person_id', contact.id)
+        .order('created_at', { ascending: false });
 
-      console.log('Starting profile generation for:', {
-        contactId: contact.id,
-        name: contact.name
-      });
+      if (timelineError) throw timelineError;
 
       const response = await fetch('/api/profile/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId: contact.id })
-      });
-
-      const data = await response.json();
-      console.log('Profile generation response:', {
-        status: response.status,
-        ok: response.ok,
-        data: data
+        body: JSON.stringify({ 
+          personId: contact.id,
+          timelineData: timelineData || [] // Include timeline data for context
+        })
       });
 
       if (!response.ok) {
-        // Extract the error message from the response
-        const errorMessage = data.error || `Server error (${response.status})`;
-        console.error('Profile generation failed:', errorMessage);
-        throw new Error(errorMessage);
+        throw new Error('Failed to generate profile');
       }
 
-      if (!data.data) {
-        console.error('Invalid response format:', data);
-        throw new Error('No data returned from profile generation');
-      }
-      
-      // Update the local state with the generated content
-      setEditedContact(prev => ({
-        ...prev,
-        summary: data.data.summary,
-        detailedSummary: data.data.detailed_summary,
-        introsSought: data.data.intros_sought,
-        reasonsToIntroduce: data.data.reasons_to_introduce
-      }));
+      const data = await response.json();
 
-      // Save the changes immediately
-      console.log('Saving generated profile to database');
-      const { error: saveError } = await supabase
-        .from('people')
-        .update({
-          summary: data.data.summary,
-          detailed_summary: data.data.detailed_summary,
-          intros_sought: data.data.intros_sought,
-          reasons_to_introduce: data.data.reasons_to_introduce,
-          last_generated_at: new Date().toISOString()
-        })
-        .eq('id', contact.id);
-
-      if (saveError) {
-        console.error('Error saving generated profile:', saveError);
-        throw new Error('Generated profile but failed to save changes');
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate profile');
       }
 
-      refreshTimeline(); // Refresh timeline after generation
+      refreshTimeline();
       toast.success('Profile generated successfully', {
-        description: 'AI has analyzed the timeline and updated the profile.'
+        description: 'AI has analyzed existing information and updated the profile.'
       });
     } catch (error) {
       console.error('Error generating profile:', error);
@@ -386,6 +353,43 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleEnrich = async () => {
+    try {
+      setIsEnriching(true);
+      const response = await fetch('/api/profile/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          personId: contact.id,
+          systemPromptKey: 'enrich_profile'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to enrich profile');
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to enrich profile');
+      }
+
+      refreshTimeline();
+      toast.success('Profile enriched successfully', {
+        description: 'AI has researched and added new information to the profile.'
+      });
+      router.refresh();
+    } catch (error) {
+      console.error('Error enriching profile:', error);
+      toast.error('Failed to enrich profile', {
+        description: error instanceof Error ? error.message : 'Please try again later'
+      });
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -522,18 +526,25 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                         {contact.company && (
                           <p className="text-muted-foreground">{contact.company}</p>
                         )}
+                        {/* Show LinkedIn logo below company name, far left, only in view mode */}
+                        {contact.linkedinUrl && (
+                          <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
+                            <a
+                              href={contact.linkedinUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ display: 'flex', alignItems: 'center' }}
+                            >
+                              <img
+                                src="/linkedin.png"
+                                alt="LinkedIn"
+                                style={{ width: 28, height: 28, marginRight: 8 }}
+                              />
+                            </a>
+                          </div>
+                        )}
                         {contact.email && (
                           <p className="text-muted-foreground mt-1">{contact.email}</p>
-                        )}
-                        {contact.linkedinUrl && (
-                          <a 
-                            href={contact.linkedinUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-blue-600 hover:text-blue-800 mt-1 block"
-                          >
-                            LinkedIn Profile
-                          </a>
                         )}
                       </>
                     )}
@@ -596,7 +607,18 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                       className="min-h-[150px] w-full p-3"
                     />
                   ) : (
-                    editedContact.detailedSummary || 'No information provided'
+                    editedContact.detailedSummary
+                      ? (
+                          <div>
+                            {editedContact.detailedSummary
+                              .split(/\n{2,}|\r?\n/)
+                              .filter(Boolean)
+                              .map((para, idx) => (
+                                <p key={idx} style={{ marginBottom: '1em' }}>{para}</p>
+                              ))}
+                          </div>
+                        )
+                      : 'No information provided'
                   )}
                 </div>
               </div>
@@ -826,6 +848,29 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                 onClick={() => setShowAddContext(true)}
               >
                 Add Context
+              </Button>
+
+              {/* Visual separator between user and AI actions */}
+              <div className="h-px bg-border my-3" />
+
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} />
+                Re-generate Profile
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleEnrich}
+                disabled={isEnriching}
+              >
+                <Search className={`mr-2 h-4 w-4 ${isEnriching ? 'animate-spin' : ''}`} />
+                Enrich Profile
               </Button>
             </div>
 
