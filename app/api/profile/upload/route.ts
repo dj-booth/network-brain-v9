@@ -32,7 +32,6 @@ export async function POST(req: Request) {
       Key: fileName,
       Body: buffer,
       ContentType: file.type,
-      ACL: 'public-read', // Make the file public
     }));
     const url = `https://${BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
     return NextResponse.json({ url });
