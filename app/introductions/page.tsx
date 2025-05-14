@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Input } from '@/components/ui/input';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 
 interface SuggestedIntroduction {
   id: string;
@@ -67,6 +68,7 @@ export default function IntroductionsPage() {
   const [savedNotes, setSavedNotes] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
   const personId = searchParams.get('personId');
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   useEffect(() => {
     async function loadPeople() {
@@ -532,14 +534,37 @@ export default function IntroductionsPage() {
                 />
               </div>
 
-              <div className="flex justify-end pt-4">
-                <Button 
-                  size="lg" 
-                  onClick={generateIntroductions}
-                  disabled={isGenerating}
-                >
-                  {isGenerating ? "Generating..." : "Generate Introductions"}
-                </Button>
+              <div
+                className="flex justify-end pt-4"
+                onMouseEnter={() => setPopoverOpen(true)}
+                onMouseLeave={() => setPopoverOpen(false)}
+              >
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <div className="relative group">
+                      <Button 
+                        size="lg" 
+                        onClick={generateIntroductions}
+                        disabled={isGenerating}
+                      >
+                        {isGenerating ? "Generating..." : "Generate Introductions"}
+                      </Button>
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={8}
+                    className="w-64 p-0"
+                    side="top"
+                    onOpenAutoFocus={e => e.preventDefault()}
+                  >
+                    <div className="flex flex-col divide-y divide-muted-foreground/10">
+                      <div className="px-4 py-3 hover:bg-accent cursor-pointer text-sm">Similar profiles</div>
+                      <div className="px-4 py-3 hover:bg-accent cursor-pointer text-sm">Matches "looking for"</div>
+                      <div className="px-4 py-3 hover:bg-accent cursor-pointer text-sm">Matches "can help with"</div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </CardContent>
           </Card>

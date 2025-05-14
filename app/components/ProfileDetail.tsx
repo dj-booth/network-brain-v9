@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { PencilIcon, CheckIcon, PlusCircleIcon, RefreshCw, Trash2, Search } from 'lucide-react';
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CommunitySelector } from './CommunitySelector';
 import { Timeline } from './Timeline';
@@ -60,6 +60,8 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
   const [timelineRefreshTrigger, setTimelineRefreshTrigger] = useState(0);
   const [communityMemberships, setCommunityMemberships] = useState<CommunityMembershipInfo[]>([]);
   const [showEventSelector, setShowEventSelector] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Update editedContact when contact changes
   useEffect(() => {
@@ -417,6 +419,28 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
     }
   };
 
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/profile/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.url) {
+        setEditedContact((prev) => ({ ...prev, imageUrl: data.url }));
+        toast.success('Profile photo updated!');
+      }
+    } else {
+      toast.error('Failed to upload photo');
+    }
+    setUploading(false);
+  };
+
   // Define the fields to display
   const profileFields: Array<{key: keyof ProfileFields; label: string; type: 'text' | 'textarea' | 'array'; showByDefault?: boolean}> = [
     { key: 'email', label: 'Email', type: 'text' },
@@ -455,13 +479,31 @@ export function ProfileDetail({ contact }: ProfileDetailProps) {
                 <div className={styles.profileInfo}>
                   <div className={styles.profileImage}>
                     <Image
-                      src={contact.imageUrl}
+                      src={editedContact.imageUrl || contact.imageUrl}
                       alt={contact.name}
                       width={96}
                       height={96}
                       className="object-cover"
                     />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={fileInputRef}
+                      style={{ display: 'none' }}
+                      onChange={handlePhotoUpload}
+                    />
                   </div>
+                  {isEditing && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? 'Uploading...' : 'Upload Photo'}
+                    </Button>
+                  )}
                   {/* Name, Title, Company, Tags */}
                   <div className="flex-1 min-w-0">
                     <h1 className="text-2xl font-bold truncate">

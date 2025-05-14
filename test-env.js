@@ -1,1 +1,1 @@
-console.log('PROXYCURL_API_KEY:', process.env.PROXYCURL_API_KEY); 
+// Remove the PROXYCURL_API_KEY log line 
