@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     const url = `https://${BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
     return NextResponse.json({ url });
   } catch (err) {
+    console.error('S3 upload error:', err);
     return NextResponse.json({ error: 'Failed to upload to S3', details: (err as Error).message }, { status: 500 });
   }
 } 
