@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 export const runtime = 'nodejs';
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
+const BUCKET = process.env.S3_BUCKET_NAME!;
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -17,10 +25,18 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(arrayBuffer);
   const ext = file.name.split('.').pop() || 'jpg';
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-  await fs.mkdir(uploadDir, { recursive: true });
-  const filePath = path.join(uploadDir, fileName);
-  await fs.writeFile(filePath, buffer);
-  const url = `/uploads/${fileName}`;
-  return NextResponse.json({ url });
+
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: fileName,
+      Body: buffer,
+      ContentType: file.type,
+      ACL: 'public-read', // Make the file public
+    }));
+    const url = `https://${BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    return NextResponse.json({ url });
+  } catch (err) {
+    return NextResponse.json({ error: 'Failed to upload to S3', details: (err as Error).message }, { status: 500 });
+  }
 } 
