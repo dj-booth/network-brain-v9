@@ -5,7 +5,10 @@ const config: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-    domains: ['i.postimg.cc', 'postimg.cc'],
+    domains: [
+      'network-brain-profile-photos.s3.ap-southeast-2.amazonaws.com',
+      'i.postimg.cc', 'postimg.cc',
+    ],
   },
 };
 
